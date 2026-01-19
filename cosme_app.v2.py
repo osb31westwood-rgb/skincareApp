@@ -7,7 +7,7 @@ from io import BytesIO
 import urllib.parse  # これが必要でした！
 
 # --- 1. 基本設定 ---
-st.set_page_config(page_title="CosmeInsight Pro", layout="wide")
+st.set_page_config(page_title="最新版CosmeInsight Pro", layout="wide")
 
 COLUMN_CONFIG = {
     "スキンケア商品（フェイスケア・ボディケア）": {
