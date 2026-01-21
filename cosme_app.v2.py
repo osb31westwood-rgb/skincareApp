@@ -290,7 +290,16 @@ if df is not None:
             prompt = f"商品名:{selected_item}\n特徴:{input_info}\n分析:{analysis_hint}\n要望:{human_hint}\n薬機法を守り、魅力的なコピーを3案出して。"
             
             if model:
-                with st.spinner("生成中..."):
+                # 293行目付近に挿入
+             st.write("DEBUG: APIキーを認識しています。")
+             st.write(f"DEBUG: 使用モデル: {model.model_name}")
+
+             try:
+                 res = model.generate_content(prompt)
+                 st.write("DEBUG: 生成に成功しました！")
+             except Exception as e:
+                 st.error(f"DEBUG: 生成中にエラー発生: {e}")
+    with st.spinner("生成中..."):
                     res = model.generate_content(prompt)
                     generated_text = res.text
                     
