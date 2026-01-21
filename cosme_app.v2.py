@@ -365,8 +365,8 @@ if df is not None:
                 else:
                     st.warning("この商品はカルテに登録されていないため、保存できません。先にカルテ作成をしてください。")
 
-elif menu == "商品POPカルテ":
-        st.header("📋 登録済み商品カルテ一覧")
+　　　　elif menu == "商品POPカルテ":
+        　st.header("📋 登録済み商品カルテ一覧")
         
         # 1. 接続テスト
         try:
