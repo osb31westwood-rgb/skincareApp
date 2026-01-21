@@ -171,7 +171,6 @@ if df is not None:
     elif menu == "商品POPカルテ":
         st.header("📋 共有商品POPカルテ")
         with st.expander("📝 カルテを新規保存", expanded=True):
-            creator = st.text_input("作成者名")
             
             # --- 【修正ポイント】商品名の選択方法を切り替えられるようにする ---
             items_list = sorted(sub_df[conf["item_col"]].dropna().unique())
@@ -184,6 +183,8 @@ if df is not None:
             
             ai_copy = st.text_area("AIポップコピー案（メモ）")
             official_info = st.text_area("公式情報・成分・画像URLなど")
+
+            creator = st.text_input("作成者名")
             
             if st.button("💾 保存実行"):
                 if creator and target_item:
