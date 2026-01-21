@@ -366,39 +366,45 @@ if df is not None:
                     st.warning("この商品はカルテに登録されていないため、保存できません。先にカルテ作成をしてください。")
 
 elif menu == "商品POPカルテ":
-    st.header("📋 共有商品POPカルテ")
-    with st.expander("📝 カルテを新規保存", expanded=True):
-            
-            # --- 【修正ポイント】商品名の選択方法を切り替えられるようにする ---
-            items_list = sorted(sub_df[conf["item_col"]].dropna().unique())
-            input_method = st.radio("商品の入力方法", ["既存のデータから選ぶ", "新しい商品を直接入力する"], horizontal=True)
-            
-            if input_method == "既存のデータから選ぶ" and items_list:
-                target_item = st.selectbox("商品を選択", items_list, key="kt_item_select")
-            else:
-                target_item = st.text_input("商品名を入力（新商品など）", key="kt_item_input")
-            
-            ai_copy = st.text_area("AIポップコピー案（メモ）")
-            official_info = st.text_area("公式情報・成分・画像URLなど")
+        st.header("📋 登録済み商品カルテ一覧")
 
-            creator = st.text_input("作成者名")
-            
-            if st.button("💾 保存実行"):
-                if creator and target_item:
-                    try:
-                        client = get_gspread_client()
-                        # ★ここをご自身のスプレッドシート名に書き換えてください
-                        sh = client.open("Cosme Data") 
-                        sheet = sh.worksheet("カルテ")
-                        sheet.append_row([
-                            datetime.now().strftime("%Y-%m-%d %H:%M"), 
-                            creator, 
-                            target_item, 
-                            ai_copy, 
-                            official_info
-                        ])
-                        st.success(f"「{target_item}」の情報を保存しました！")
-                    except Exception as e: 
-                        st.error(f"保存失敗: {e}")
-                else:
-                    st.warning("作成者名と商品名を入力してください。")
+        try:
+            # 1. スプレッドシートからデータを取得
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet_karte = sh.worksheet("カルテ")
+            records = sheet_karte.get_all_records()
+
+            if not records:
+                st.info("💡 まだカルテにデータが登録されていません。「AIポップ生成」から保存するか、直接スプレッドシートに入力してください。")
+            else:
+                # 2. Pandasのデータフレームに変換して表示
+                import pandas as pd
+                df_karte = pd.DataFrame(records)
+
+                # 表示する列を整理（スプレッドシートの項目名に合わせる）
+                # 存在する列だけを表示するように安全に指定
+                target_cols = ["日付", "作成者", "商品名", "AIコピー", "公式情報", "ポップ案"]
+                display_cols = [c for c in target_cols if c in df_karte.columns]
+                
+                st.subheader("現在の登録内容")
+                st.dataframe(df_karte[display_cols], use_container_width=True)
+
+                # 3. 簡易検索・詳細表示機能
+                st.markdown("---")
+                search_item = st.selectbox("詳細を確認する商品を選択", df_karte["商品名"].unique(), key="karte_detail_select")
+                
+                detail_row = df_karte[df_karte["商品名"] == search_item].iloc[0]
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write(f"**作成者:** {detail_row.get('作成者', '不明')}")
+                    st.write(f"**公式情報:**")
+                    st.info(detail_row.get('公式情報', '未登録'))
+                with c2:
+                    st.write(f"**最新のポップ案:**")
+                    st.success(detail_row.get('ポップ案', '未作成'))
+
+        except Exception as e:
+            st.error(f"カルテの表示中にエラーが発生しました。スプレッドシートの設定を確認してください。")
+            st.warning(f"詳細エラー: {e}")
