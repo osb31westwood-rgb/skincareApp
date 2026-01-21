@@ -212,7 +212,24 @@ if df is not None:
 
         ng_dict = load_ng_words()
         
-        # 1. 商品リストとカルテデータの取得
+        # 商品リストとカルテデータの取得（修正版）
+        survey_items = set(sub_df[conf["item_col"]].dropna().unique())
+        saved_records = []
+        try:
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet_karte = sh.worksheet("カルテ")
+            saved_records = sheet_karte.get_all_records()
+        except Exception as e:
+            st.warning(f"カルテの読み込みを待機中、またはエラー: {e}")
+            saved_records = [] # エラーが起きても空のリストを入れる
+
+        # データが1件もない場合の回避
+        if saved_records:
+            saved_items = {row.get('商品名', '') for row in saved_records if '商品名' in row}
+        else:
+            saved_items = set()
+            # 1. 商品リストとカルテデータの取得
         survey_items = set(sub_df[conf["item_col"]].dropna().unique())
         saved_records = []
         try:
