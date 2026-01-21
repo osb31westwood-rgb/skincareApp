@@ -6,28 +6,32 @@ import qrcode
 from io import BytesIO
 import urllib.parse
 import google.generativeai as genai
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 
-# Gemini APIの初期化（Secretsから安全に読み込み）
-if "AIzaSyDxw5AcNv3n6XoZSgLwAGF5-kcnbeuRR3Y" in st.secrets:
+# Gemini APIの初期化
+if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     model = None
 
-# 定数定義
+# スプレッドシート接続関数
+def get_gspread_client():
+    s_acc = st.secrets["gcp_service_account"]
+    credentials = Credentials.from_service_account_info(
+        s_acc,
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    )
+    return gspread.authorize(credentials)
+
+# 定数・カラーパレット
 COL_GENRE = "今回ご使用の商品のジャンルを選択してください。"
 COL_AGE = "年齢"
-
-GENRE_TYPE_IDS = {
-    "スキンケア商品（フェイスケア・ボディケア）": "entry.1030688450",
-    "ヘアケア商品": "entry.279505478",
-    "コスメ商品（ベースメイク）": "entry.997470046",
-    "コスメ商品（ポイントメイク）": "entry.948471097"
-}
-
 COLOR_PALETTES = {
     "ナチュラル（自然派）": ["#a98467", "#adc178", "#dde5b6", "#6c584c", "#f0ead2"],
     "くすみカラー": ["#8e9775", "#e28e8e", "#94a7ae", "#a79c93", "#d4a5a5"],
@@ -36,6 +40,7 @@ COLOR_PALETTES = {
     "ローズ系": ["#e5989b", "#ffb4a2", "#ffcdb2", "#b5838d", "#6d597a"]
 }
 
+# カラム設定（全ジャンル）
 COLUMN_CONFIG = {
     "スキンケア商品（フェイスケア・ボディケア）": {
         "item_col": "今回ご使用の商品名を入力してください。",
@@ -56,18 +61,18 @@ COLUMN_CONFIG = {
         "type_col": "コスメ商品（ベースメイク）を選択した方は種類を選択してください。",
         "concern_col_keyword": "肌悩み",
         "types": ["日焼け止め・UVカット", "化粧下地（コントロールカラー・UV下地）", "パウダーファンデーション", "リキッドファンデーション", "クッションファンデーション", "BBクリーム・CCクリーム", "フェイスパウダー（ルース・プレスト）", "メイクキープ（フィックスミスト）その他"],
-        "scores": ["伸びの良ささを実感", "仕上がりの美しさ", "崩れにくさ・キープ力", "保湿力・乾燥しにくさ", "肌への負担感の少なさ", "パッケージのときめき・使いやすさ", "リピート欲・おすすめ度"]
+        "scores": ["伸びの良さ・密着感", "仕上がりの美しさ", "崩れにくさ・キープ力", "保湿力・乾燥しにくさ", "肌への負担感の少なさ", "パッケージのときめき・使いやすさ", "リピート欲・おすすめ度"]
     },
     "コスメ商品（ポイントメイク）": {
         "item_col": "今回ご使用の商品名を入力してください。.3",
         "type_col": "コスメ商品（ポイントメイク）を選択した方は種類を選択してください。",
         "concern_col_keyword": "肌悩み",
         "types": ["アイシャドウ", "アイライナー", "アイブロウ", "マスカラ・マスカラ下地", "リップ・口紅・グロス・ティント", "チーク", "ハイライト・シェーディング", "その他"],
-        "scores": ["発色の良さ", "質感の好み（ラメ・パール・ツヤ感・マット感）", "崩れにくさ・キープ力", "保湿力・乾燥しにくさ", "クレンジングのしやすさ", "パッケージのときめき・使いやすさ", "リピート欲・おすすめ度"]
+        "scores": ["発色の良さ", "質感の好み（ラメ・パール・ツヤ感・マット感）", "崩れにくさ・キープ力", "保湿力・乾燥しにくさ", "クレンジングのやすさ", "パッケージのときめき・使いやすさ", "リピート欲・おすすめ度"]
     }
 }
 
-# --- 2. データ読み込み ---
+# データ読み込み
 @st.cache_data(ttl=300)
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT5HpURwDWt6S0KkQbiS8ugZksNm8yTokNeKE4X-oBHmLMubOvOKIsuU4q6_onLta2cd0brCBQc-cHA/pub?gid=1578087772&single=true&output=csv"
@@ -80,7 +85,7 @@ def load_data():
 
 df = load_data()
 
-# --- 3. サイドバー ---
+# サイドバー設定
 st.sidebar.title("💄 Cosme Management")
 menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品POPカルテ"])
 selected_theme = st.sidebar.selectbox("📊 配色テーマ", list(COLOR_PALETTES.keys()))
@@ -90,84 +95,90 @@ if df is not None:
     if menu == "QR生成":
         st.header("📲 アンケート回答用QR作成")
         q_genre = st.selectbox("ジャンルを選択", list(COLUMN_CONFIG.keys()))
-        q_type = st.selectbox("種類を選択", COLUMN_CONFIG[q_genre]["types"])
         q_item = st.text_input("商品名を入力")
         if st.button("QRコードを発行"):
-            type_id = GENRE_TYPE_IDS.get(q_genre)
-            params = urllib.parse.urlencode({"entry.500746217": q_genre, type_id: q_type, "entry.1507235458": q_item})
+            params = urllib.parse.urlencode({"entry.500746217": q_genre, "entry.1507235458": q_item})
             full_url = f"https://docs.google.com/forms/d/e/1FAIpQLSdBubITUy2hWaM8z9Ryo4QV6qKF0A1cnUnFEM49E6tdf8JeXw/viewform?usp=pp_url&{params}"
             qr = qrcode.make(full_url)
             buf = BytesIO()
             qr.save(buf)
             st.image(buf.getvalue(), width=300)
-            st.write(f"URL: [リンク]({full_url})")
+            # 共通フィルタリング
+    genre = st.sidebar.selectbox("分析ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
+    conf = COLUMN_CONFIG[genre]
+    sub_df = df[df[COL_GENRE] == genre].copy()
 
-    elif menu == "AIポップ生成":
-        st.header("✨ Gemini AI キャッチコピー生成")
-        genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()))
-        conf = COLUMN_CONFIG[genre]
-        sub_df = df[df[COL_GENRE] == genre].copy()
+    if menu == "レーダーチャート比較":
+        st.header(f"📊 スパイダー分析 ({selected_theme})")
         items = sorted(sub_df[conf["item_col"]].dropna().unique())
-        item_name = st.selectbox("商品を選択", items)
-
-        if st.button("AIにコピーを考えてもらう"):
-            stats = sub_df[sub_df[conf["item_col"]] == item_name][conf["scores"]].mean()
-            best_point = stats.idxmax()
-            best_score = round(stats.max(), 1)
-            
-            prompt = f"商品名:{item_name}、最大の特徴:{best_point}(スコア{best_score})に基づき、店頭POP用のキャッチコピーを3案、コスメ好きに刺さる言葉で作成してください。"
-            
-            if model:
-                with st.spinner("思考中..."):
-                    res = model.generate_content(prompt)
-                    st.success("🤖 AIからの提案")
-                    st.markdown(res.text)
-            else:
-                st.warning("APIキー未設定のため定型文を表示します。")
-                st.info(f"『驚きの{best_point}を、あなたに。』")
-                # 共通フィルタリング（分析メニュー用）
-    if menu in ["レーダーチャート比較", "分布図分析", "商品POPカルテ"]:
-        genre = st.selectbox("1. ジャンルを選択", list(COLUMN_CONFIG.keys()), key="anal_g")
-        conf = COLUMN_CONFIG[genre]
-        sub_df = df[df[COL_GENRE] == genre].copy()
-
-        if menu == "レーダーチャート比較":
-            st.header(f"📊 スパイダーチャート分析 ({selected_theme})")
-            items = sorted(sub_df[conf["item_col"]].dropna().unique())
-            selected_items = st.multiselect("2. 商品を選択", items)
-            if selected_items:
-                fig = go.Figure()
-                valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
-                for i, item in enumerate(selected_items):
-                    item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
-                    color = theme_colors[i % len(theme_colors)]
-                    fig.add_trace(go.Scatterpolar(r=item_data.values, theta=valid_scores, fill='toself', name=item, fillcolor=color, line=dict(color=color), opacity=0.6))
-                fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), paper_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig, use_container_width=True)
-
-        elif menu == "分布図分析":
-            st.header(f"📈 分析分布 ({selected_theme})")
+        selected_items = st.multiselect("商品を選択", items)
+        if selected_items:
+            fig = go.Figure()
             valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
-            x_ax = st.selectbox("横軸", valid_scores, index=0)
-            y_ax = st.selectbox("縦軸", valid_scores, index=len(valid_scores)-1 if len(valid_scores)>1 else 0)
-            fig = px.scatter(sub_df, x=x_ax, y=y_ax, color=COL_AGE, hover_name=conf["item_col"], color_discrete_sequence=theme_colors)
+            for i, item in enumerate(selected_items):
+                item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
+                color = theme_colors[i % len(theme_colors)]
+                fig.add_trace(go.Scatterpolar(r=item_data.values, theta=valid_scores, fill='toself', name=item, line=dict(color=color), fillcolor=color, opacity=0.5))
+            fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
 
-        elif menu == "商品POPカルテ":
-            st.header("📋 商品POPカルテ (Canva下書き用)")
-            items = sorted(sub_df[conf["item_col"]].dropna().unique())
-            item_name = st.selectbox("商品を選択", items)
-            col1, col2 = st.columns(2)
-            with col1:
-                img = st.file_uploader("画像アップロード", type=['png', 'jpg'])
-                if img: st.image(img, width=250)
-                desc = st.text_area("公式キャッチコピー・特徴")
-            with col2:
-                stats = sub_df[sub_df[conf["item_col"]] == item_name][conf["scores"]].mean()
-                if not stats.empty:
-                    st.metric("顧客の支持ポイント", stats.idxmax())
-                    st.write(f"おすすめ配色テーマ: {selected_theme}")
-                    st.button("カルテを一時保存")
+    elif menu == "分布図分析":
+        st.header(f"📈 分析分布 ({selected_theme})")
+        valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
+        x_ax = st.selectbox("横軸", valid_scores, index=0)
+        y_ax = st.selectbox("縦軸", valid_scores, index=len(valid_scores)-1 if len(valid_scores)>1 else 0)
+        fig = px.scatter(sub_df, x=x_ax, y=y_ax, color=COL_AGE, hover_name=conf["item_col"], color_discrete_sequence=theme_colors)
+        st.plotly_chart(fig, use_container_width=True)
 
+    elif menu == "AIポップ生成":
+        st.header("✨ Gemini AI キャッチコピー案")
+        items = sorted(sub_df[conf["item_col"]].dropna().unique())
+        item_name = st.selectbox("商品を選択", items)
+        if st.button("AIコピーを生成"):
+            stats = sub_df[sub_df[conf["item_col"]] == item_name][conf["scores"]].mean()
+            best_point = stats.idxmax()
+            prompt = f"商品名:{item_name}、顧客が最も評価した点:{best_point}。コスメ好きが思わず手に取る、Canvaで使えるポップ用コピーを3案提案して。"
+            if model:
+                with st.spinner("AIが考え中..."):
+                    res = model.generate_content(prompt)
+                    st.success("🤖 AIの提案")
+                    st.write(res.text)
+            else: st.warning("APIキー未設定です。")
+
+    elif menu == "商品POPカルテ":
+        st.header("📋 共有商品POPカルテ")
+        with st.expander("📝 カルテを新規保存", expanded=True):
+            creator = st.text_input("作成者名")
+            item_name = st.selectbox("商品を選択", sorted(sub_df[conf["item_col"]].dropna().unique()))
+            ai_copy = st.text_area("AIポップコピー案（メモ）")
+            official_info = st.text_area("公式情報・成分など")
+            if st.button("💾 スプレッドシートへ保存"):
+                if creator and item_name:
+                    try:
+                        client = get_gspread_client()
+                        sh = client.open("あなたのスプレッドシート名") # ←重要！
+                        sheet = sh.worksheet("カルテ")
+                        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        sheet.append_row([now, creator, item_name, ai_copy, official_info])
+                        st.success("保存完了！")
+                    except Exception as e: st.error(f"エラー: {e}")
+
+        st.markdown("---")
+        st.subheader("📚 過去のカルテ一覧")
+        try:
+            client = get_gspread_client()
+            sh = client.open("あなたのスプレッドシート名") # ←重要！
+            sheet = sh.worksheet("カルテ")
+            records = sheet.get_all_records()
+            if records:
+                for i, row in enumerate(records):
+                    with st.expander(f"{row['日付']} | {row['商品名']} ({row['作成者']})"):
+                        st.write(f"**コピー:** {row['AIコピー']}")
+                        st.write(f"**公式:** {row['公式情報']}")
+                        if st.button("🗑️ 削除", key=f"del_{i}"):
+                            sheet.delete_rows(i + 2)
+                            st.rerun()
+            else: st.info("データがありません。")
+        except: st.write("データを読み込めませんでした。")
 else:
-    st.error("データの読み込みに失敗しました。")
+    st.error("スプレッドシートの読み込みに失敗しました。")
