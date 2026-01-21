@@ -200,13 +200,12 @@ if df is not None:
         fig = px.scatter(sub_df, x=x_ax, y=y_ax, color=COL_AGE, hover_name=conf["item_col"], color_discrete_sequence=theme_colors)
         st.plotly_chart(fig, use_container_width=True)
 
-    elif menu == "AIポップ生成":
+   elif menu == "AIポップ生成":
         st.header("✨ AI×人間 共同ポップ制作（薬機法チェック付）")
 
-        # 1. 辞書・商品データの読み込み
         ng_dict = load_ng_words()
         
-        # 商品リストの作成
+        # 商品リスト作成
         survey_items = set(sub_df[conf["item_col"]].dropna().unique())
         saved_records = []
         try:
@@ -218,10 +217,8 @@ if df is not None:
         
         saved_items = {row['商品名'] for row in saved_records}
         all_items = sorted(list(survey_items | saved_items))
-        
         selected_item = st.selectbox("制作する商品を選択", all_items)
         
-        # カルテから情報取得
         saved_info = ""
         for row in saved_records:
             if row['商品名'] == selected_item:
@@ -229,97 +226,57 @@ if df is not None:
                 break
 
         st.markdown("---")
-        
-        # 2. 編集・分析エリア
         col1, col2 = st.columns([1, 1])
         
         with col1:
             st.subheader("📖 商品情報・指示")
             input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150)
-            human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向けに上品に")
-            
-            # 生成ボタンを左側に配置
+            human_hint = st.text_input("AIへの追加指示")
             run_generate = st.button("🚀 AIポップコピーを生成")
 
         with col2:
             st.subheader("📊 顧客の声（分析視覚化）")
             item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
-            
             if not item_stats.dropna().empty:
                 tab1, tab2 = st.tabs(["スパイダー", "分布推移"])
-                
                 with tab1:
-                    # スパイダーチャート
-                    fig_spy = go.Figure(go.Scatterpolar(
-                        r=item_stats.values,
-                        theta=conf["scores"],
-                        fill='toself',
-                        line=dict(color=theme_colors[0])
-                    ))
-                    fig_spy.update_layout(
-                        polar=dict(radialaxis=dict(visible=True, range=[0, 5])),
-                        height=300, margin=dict(l=40, r=40, t=20, b=20),
-                        paper_bgcolor="rgba(0,0,0,0)"
-                    )
+                    fig_spy = go.Figure(go.Scatterpolar(r=item_stats.values, theta=conf["scores"], fill='toself'))
+                    fig_spy.update_layout(height=300, polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
                     st.plotly_chart(fig_spy, use_container_width=True)
-                
                 with tab2:
-                    # 分布図（簡易表示：全データの中での位置づけ）
-                    fig_scat = px.scatter(
-                        sub_df, x=conf["scores"][0], y=conf["scores"][-1],
-                        color_discrete_sequence=[theme_colors[1]],
-                        opacity=0.3
-                    )
-                    # 選択中の商品だけ強調
-                    this_item = sub_df[sub_df[conf["item_col"]] == selected_item]
-                    fig_scat.add_trace(go.Scatter(
-                        x=this_item[conf["scores"][0]], y=this_item[conf["scores"][-1]],
-                        mode='markers', marker=dict(color='red', size=12, symbol='star'),
-                        name='この商品'
-                    ))
-                    fig_scat.update_layout(height=300, showlegend=False, margin=dict(l=20, r=20, t=20, b=20))
+                    fig_scat = px.scatter(sub_df, x=conf["scores"][0], y=conf["scores"][-1], opacity=0.3)
                     st.plotly_chart(fig_scat, use_container_width=True)
-                
-                analysis_hint = f"顧客分析結果: {item_stats.idxmax()}が最高評価です。"
+                analysis_hint = f"分析結果: {item_stats.idxmax()}が高評価。"
             else:
-                st.info("アンケートデータなし（新商品として生成）")
-                analysis_hint = "新商品としての魅力を提案してください。"
+                st.info("データなし")
+                analysis_hint = "新商品として提案してください。"
 
-        # 3. AI生成実行
+        # --- ここが問題の319行目付近のブロック ---
         if run_generate:
-            prompt = f"商品名:{selected_item}\n特徴:{input_info}\n分析:{analysis_hint}\n要望:{human_hint}\n薬機法を守り、魅力的なコピーを3案出して。"
-            
             if model:
-                # 293行目付近に挿入
-             st.write("DEBUG: APIキーを認識しています。")
-             st.write(f"DEBUG: 使用モデル: {model.model_name}")
+                with st.spinner("AI生成中..."):
+                    try:
+                        res = model.generate_content(f"商品:{selected_item}\n特徴:{input_info}\n要望:{human_hint}\n分析:{analysis_hint}\n薬機法を守って3案提案して。")
+                        generated_text = res.text
+                        
+                        st.markdown("---")
+                        st.subheader("⚠️ 薬機法チェック")
+                        found_ng = False
+                        for word, reason in ng_dict.items():
+                            if word in generated_text:
+                                st.error(f"**NGワード: {word}** ({reason})")
+                                found_ng = True
+                        if not found_ng: st.success("NGワードなし")
+                        
+                        st.markdown("---")
+                        st.success("🤖 AI提案")
+                        st.write(generated_text)
+                    except Exception as e:
+                        st.error(f"生成エラー: {e}")
+            else:
+                st.error("APIキーが設定されていません。")
 
-             try:
-                 res = model.generate_content(prompt)
-                 st.write("DEBUG: 生成に成功しました！")
-             except Exception as e:
-                 st.error(f"DEBUG: 生成中にエラー発生: {e}")
-    with st.spinner("生成中..."):
-                    res = model.generate_content(prompt)
-                    generated_text = res.text
-                    
-                    # 薬機法チェック
-                    st.markdown("---")
-                    st.subheader("⚠️ 薬機法チェック結果")
-                    found_ng = False
-                    for word, reason in ng_dict.items():
-                        if word in generated_text:
-                            st.error(f"**NGワード検知: 「{word}」** → {reason}")
-                            found_ng = True
-                    if not found_ng: st.success("NGワードは見つかりませんでした。")
-                    
-                    st.markdown("---")
-                    st.success("🤖 AI提案")
-                    st.write(generated_text)
-            else: 
-    st.error("APIキー未設定です。")
-
-    elif menu == "商品POPカルテ":
+elif menu == "商品POPカルテ":
     st.header("📋 共有商品POPカルテ")
     with st.expander("📝 カルテを新規保存", expanded=True):
             
