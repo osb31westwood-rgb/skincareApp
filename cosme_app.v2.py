@@ -142,7 +142,7 @@ if df is not None:
             st.image(buf.getvalue(), width=300, caption="スマホで読み取って回答")
             st.write(f"URL: [回答リンク]({full_url})")
 
-   elif menu == "レーダーチャート比較":
+    elif menu == "レーダーチャート比較":
         st.header(f"📊 スパイダー分析 ({selected_theme})")
         
         # --- 【新機能】グリッド切り替えスイッチ ---
