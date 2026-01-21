@@ -202,44 +202,9 @@ if df is not None:
     elif menu == "AIポップ生成":
         st.header("✨ AI×人間 共同ポップ制作（薬機法チェック付）")
 
-        # 1. 辞書データの読み込み
+        # 1. 辞書・商品データの読み込み
         ng_dict = load_ng_words()
-
-        # --- 【管理機能】サイドバーでNGワード辞書を編集 ---
-        with st.sidebar.expander("🚫 NGワード辞書を編集"):
-            new_word = st.text_input("追加する単語", placeholder="例：最高")
-            new_reason = st.text_input("理由/言い換え案", placeholder="例：最大級表現はNG")
-            
-            if st.button("➕ 辞書に追加"):
-                if new_word and new_reason:
-                    try:
-                        client = get_gspread_client()
-                        sh = client.open("Cosme Data") # ★シート名確認
-                        sheet = sh.worksheet("NGワード辞書")
-                        sheet.append_row([new_word, new_reason])
-                        st.success(f"「{new_word}」を追加しました！")
-                        st.cache_data.clear() 
-                        st.rerun()
-                    except Exception as e: st.error(f"追加失敗: {e}")
-
-            st.markdown("---")
-            st.write("📝 現在の登録リスト")
-            for word, reason in ng_dict.items():
-                col_w, col_d = st.columns([3, 1])
-                col_w.write(f"**{word}**")
-                if col_d.button("🗑️", key=f"del_ng_{word}"):
-                    try:
-                        client = get_gspread_client()
-                        sh = client.open("Cosme Data")
-                        sheet = sh.worksheet("NGワード辞書")
-                        cell = sheet.find(word)
-                        sheet.delete_rows(cell.row)
-                        st.success("削除しました")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except: st.error("削除失敗")
-
-        # --- メイン画面：制作エリア ---
+        
         # 商品リストの作成
         survey_items = set(sub_df[conf["item_col"]].dropna().unique())
         saved_records = []
@@ -255,7 +220,7 @@ if df is not None:
         
         selected_item = st.selectbox("制作する商品を選択", all_items)
         
-        # カルテから情報を自動取得
+        # カルテから情報取得
         saved_info = ""
         for row in saved_records:
             if row['商品名'] == selected_item:
@@ -263,57 +228,86 @@ if df is not None:
                 break
 
         st.markdown("---")
-        col1, col2 = st.columns(2)
+        
+        # 2. 編集・分析エリア
+        col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.subheader("📖 商品情報（編集してAIに送る）")
-            input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=200)
-            human_hint = st.text_input("AIへの追加指示", placeholder="例：20代向けにキャッチーに、等")
+            st.subheader("📖 商品情報・指示")
+            input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150)
+            human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向けに上品に")
+            
+            # 生成ボタンを左側に配置
+            run_generate = st.button("🚀 AIポップコピーを生成")
 
         with col2:
-            st.subheader("📊 顧客の声（分析結果）")
+            st.subheader("📊 顧客の声（分析視覚化）")
             item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
+            
             if not item_stats.dropna().empty:
-                st.write(f"評価トップ: **{item_stats.idxmax()}**")
-                st.bar_chart(item_stats)
-                analysis_hint = f"顧客満足度調査では{item_stats.idxmax()}が最も評価されています。"
+                tab1, tab2 = st.tabs(["スパイダー", "分布推移"])
+                
+                with tab1:
+                    # スパイダーチャート
+                    fig_spy = go.Figure(go.Scatterpolar(
+                        r=item_stats.values,
+                        theta=conf["scores"],
+                        fill='toself',
+                        line=dict(color=theme_colors[0])
+                    ))
+                    fig_spy.update_layout(
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 5])),
+                        height=300, margin=dict(l=40, r=40, t=20, b=20),
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig_spy, use_container_width=True)
+                
+                with tab2:
+                    # 分布図（簡易表示：全データの中での位置づけ）
+                    fig_scat = px.scatter(
+                        sub_df, x=conf["scores"][0], y=conf["scores"][-1],
+                        color_discrete_sequence=[theme_colors[1]],
+                        opacity=0.3
+                    )
+                    # 選択中の商品だけ強調
+                    this_item = sub_df[sub_df[conf["item_col"]] == selected_item]
+                    fig_scat.add_trace(go.Scatter(
+                        x=this_item[conf["scores"][0]], y=this_item[conf["scores"][-1]],
+                        mode='markers', marker=dict(color='red', size=12, symbol='star'),
+                        name='この商品'
+                    ))
+                    fig_scat.update_layout(height=300, showlegend=False, margin=dict(l=20, r=20, t=20, b=20))
+                    st.plotly_chart(fig_scat, use_container_width=True)
+                
+                analysis_hint = f"顧客分析結果: {item_stats.idxmax()}が最高評価です。"
             else:
-                st.info("アンケートデータなし（新商品として生成します）")
-                analysis_hint = "新商品のため、商品名から魅力を推測してください。"
+                st.info("アンケートデータなし（新商品として生成）")
+                analysis_hint = "新商品としての魅力を提案してください。"
 
-        # 生成実行
-        if st.button("🚀 AIポップコピーを生成"):
-            prompt = f"""
-            以下の情報をもとに、コスメの店頭POP用キャッチコピーを3案提案してください。
-            【重要】化粧品広告のガイドライン（薬機法）を遵守し、過大な表現は避けてください。
-            ■商品名: {selected_item}
-            ■商品の特徴・成分: {input_info}
-            ■分析結果: {analysis_hint}
-            ■追加要望: {human_hint}
-            """
+        # 3. AI生成実行
+        if run_generate:
+            prompt = f"商品名:{selected_item}\n特徴:{input_info}\n分析:{analysis_hint}\n要望:{human_hint}\n薬機法を守り、魅力的なコピーを3案出して。"
             
             if model:
-                with st.spinner("AIが薬機法と顧客の声を分析中..."):
+                with st.spinner("生成中..."):
                     res = model.generate_content(prompt)
                     generated_text = res.text
                     
-                    # 薬機法（NGワード）チェック
+                    # 薬機法チェック
                     st.markdown("---")
-                    st.subheader("⚠️ 薬機法セルフチェック")
+                    st.subheader("⚠️ 薬機法チェック結果")
                     found_ng = False
                     for word, reason in ng_dict.items():
                         if word in generated_text:
                             st.error(f"**NGワード検知: 「{word}」** → {reason}")
                             found_ng = True
-                    
-                    if not found_ng:
-                        st.success("現在の辞書に基づいたチェックでは、NGワードは見つかりませんでした。")
+                    if not found_ng: st.success("NGワードは見つかりませんでした。")
                     
                     st.markdown("---")
-                    st.success("🤖 AI提案のコピー")
-                    st.markdown(generated_text)
+                    st.success("🤖 AI提案")
+                    st.write(generated_text)
             else:
-                st.error("APIキーが正しく設定されていません。")
+                st.error("APIキー未設定です。")
 
     elif menu == "商品POPカルテ":
         st.header("📋 共有商品POPカルテ")
