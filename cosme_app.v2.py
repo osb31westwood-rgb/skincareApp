@@ -316,12 +316,12 @@ if df is not None:
                     st.markdown("---")
                     st.success("🤖 AI提案")
                     st.write(generated_text)
-            else:
-                st.error("APIキー未設定です。")
+            else: 
+    st.error("APIキー未設定です。")
 
     elif menu == "商品POPカルテ":
-        st.header("📋 共有商品POPカルテ")
-        with st.expander("📝 カルテを新規保存", expanded=True):
+    st.header("📋 共有商品POPカルテ")
+    with st.expander("📝 カルテを新規保存", expanded=True):
             
             # --- 【修正ポイント】商品名の選択方法を切り替えられるようにする ---
             items_list = sorted(sub_df[conf["item_col"]].dropna().unique())
