@@ -81,6 +81,18 @@ def load_data():
         data.columns = [str(c).strip() for c in data.columns]
         return data
     except: return None
+    # --- 【新設】NGワード辞書の読み込み ---
+@st.cache_data(ttl=300)
+def load_ng_words():
+    try:
+        client = get_gspread_client()
+        sh = client.open("Cosme Data") # ★ご自身のシート名に
+        sheet = sh.worksheet("NGワード辞書")
+        records = sheet.get_all_records()
+        # { "NGワード": "理由" } という辞書形式に変換
+        return {row['NGワード']: row['理由'] for row in records if row['NGワード']}
+    except:
+        return {}
 
 df = load_data()
 
@@ -153,20 +165,78 @@ if df is not None:
         st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "AIポップ生成":
-        st.header("✨ Gemini AI キャッチコピー案")
-        items = sorted(sub_df[conf["item_col"]].dropna().unique())
-        item_name = st.selectbox("分析対象の商品を選択", items)
-        if st.button("AIコピーを生成"):
-            item_stats = sub_df[sub_df[conf["item_col"]] == item_name][conf["scores"]].mean()
+        st.header("✨ AI×人間 共同ポップ制作")
+        
+        # 1. 商品リストの作成（アンケート + 保存済みカルテ）
+        survey_items = set(sub_df[conf["item_col"]].dropna().unique())
+        saved_records = []
+        try:
+            client = get_gspread_client()
+            sh = client.open("Cosme Data") # ★ご自身のシート名に
+            sheet = sh.worksheet("カルテ")
+            saved_records = sheet.get_all_records()
+        except: pass
+        
+        saved_items = {row['商品名'] for row in saved_records}
+        all_items = sorted(list(survey_items | saved_items))
+        
+        # 2. 商品選択
+        selected_item = st.selectbox("制作する商品を選択", all_items)
+        
+        # 3. 選択された商品の「保存済み情報」を探し出す
+        saved_info = ""
+        for row in saved_records:
+            if row['商品名'] == selected_item:
+                saved_info = row['公式情報'] # 最新の保存内容を取得
+                break
+
+        st.markdown("---")
+        
+        # 4. 編集・確認エリア
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📖 保存済みの公式情報・メモ")
+            # 修正できるようにtext_areaに表示（保存済みがあればそれを初期値に）
+            input_info = st.text_area("AIに伝えたい商品特徴（編集可能）", value=saved_info, height=200, help="カルテから取得した内容です。自由に追加・変更してください。")
+            
+            human_hint = st.text_input("AIへの追加指示（例：20代向けに、短くキャッチーに、等）")
+
+        with col2:
+            st.subheader("📊 アンケート分析結果")
+            item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
             if not item_stats.dropna().empty:
-                best_point = item_stats.idxmax()
-                prompt = f"商品名:{item_name}、年代:{selected_ages}、最も評価された点:{best_point}。店頭POP用のキャッチコピーを3案提案して。"
-                if model:
-                    with st.spinner("AI思考中..."):
-                        res = model.generate_content(prompt)
-                        st.success("🤖 AI提案")
-                        st.write(res.text)
-                else: st.warning("APIキー未設定です。")
+                st.write(f"この商品は **「{item_stats.idxmax()}」** が最も高く評価されています。")
+                st.bar_chart(item_stats)
+                analysis_hint = f"アンケートでは{item_stats.idxmax()}が高評価です。"
+            else:
+                st.info("この商品のアンケートデータはまだありません。")
+                analysis_hint = ""
+
+        # 5. AI生成実行
+        if st.button("🚀 この内容でAIコピーを生成"):
+            # プロンプト（命令文）をリッチに組み立てる
+            prompt = f"""
+            以下の情報をもとに、コスメの店頭POP用キャッチコピーを3案提案してください。
+            
+            ■商品名: {selected_item}
+            ■商品の特徴・公式情報: {input_info}
+            ■分析データ: {analysis_hint}
+            ■追加の要望: {human_hint}
+            
+            コスメ好きの心に刺さる、思わず立ち止まってしまうようなコピーをお願いします。
+            """
+            
+            if model:
+                with st.spinner("情報を整理して、最適なコピーを考えています..."):
+                    res = model.generate_content(prompt)
+                    st.success("🤖 AIからの提案")
+                    st.markdown(res.text)
+                    
+                    # 生成したコピーをメモ代わりにコピーしやすいよう表示
+                    st.info("気に入った案があれば、コピーして「商品POPカルテ」に保存しておきましょう！")
+            else:
+                st.warning("APIキーが設定されていません。")
 
     elif menu == "商品POPカルテ":
         st.header("📋 共有商品POPカルテ")
