@@ -367,43 +367,59 @@ if df is not None:
 
     elif menu == "商品POPカルテ":
         st.header("📋 登録済み商品カルテ一覧")
-        
-        # 1. 接続テスト
+
         try:
+            # 1. スプレッドシートからの読み込み
             client = get_gspread_client()
             sh = client.open("Cosme Data")
             sheet_karte = sh.worksheet("カルテ")
             records = sheet_karte.get_all_records()
-        except Exception as e:
-            st.error(f"スプレッドシートにアクセスできません: {e}")
-            st.stop()
 
-        # 2. データが空の場合
-        if not records:
-            st.info("💡 スプレッドシート『カルテ』にデータがありません。1行目（見出し）だけがある状態か確認してください。")
-            st.stop()
+            if not records:
+                st.info("💡 まだカルテにデータが登録されていません。AIポップ生成から保存してください。")
+                st.stop()
 
-        # 3. データの表示
-        import pandas as pd
-        df_karte = pd.DataFrame(records)
-        
-        st.subheader("現在の登録内容")
-        # 列が存在するか確認してから表示
-        cols = [c for c in ["商品名", "公式情報", "ポップ案"] if c in df_karte.columns]
-        if cols:
-            st.dataframe(df_karte[cols], use_container_width=True)
-        else:
-            st.write("表示できる列（商品名など）が見つかりません。")
+            import pandas as pd
+            df_karte = pd.DataFrame(records)
 
-        # 4. 詳細検索（極限までシンプルに）
-        if "商品名" in df_karte.columns:
+            # 2. メインのカルテ一覧表示
+            st.subheader("📊 全商品アーカイブ")
+            # 必要な列を並び替え（スプレッドシートの項目名に合わせる）
+            cols = ["日付", "作成者", "商品名", "AIコピー", "ポップ案"]
+            display_cols = [c for c in cols if c in df_karte.columns]
+            st.dataframe(df_karte[display_cols], use_container_width=True)
+
+            # 3. 特定商品の「深掘り」表示機能（ここが大事！）
             st.markdown("---")
-            search_item = st.selectbox("詳細を確認する商品", df_karte["商品名"].unique(), key="simple_karte_select")
+            st.subheader("🔍 商品別・詳細アーカイブ")
             
-            # 該当行を抽出
-            detail = df_karte[df_karte["商品名"] == search_item]
-            if not detail.empty:
-                row = detail.iloc[0]
-                st.write(f"**商品名:** {search_item}")
-                st.info(f"**公式情報:** {row.get('公式情報', '未登録')}")
-                st.success(f"**ポップ案:** {row.get('ポップ案', '未登録')}")
+            # 商品名リストを取得
+            item_list = [n for n in df_karte["商品名"].unique() if n]
+            
+            if item_list:
+                target_item = st.selectbox("詳しく見たい商品を選択してください", item_list, key="karte_pro_select")
+                
+                # 選択された商品の最新データを取得
+                item_data = df_karte[df_karte["商品名"] == target_item].iloc[-1] # 一番下の（最新の）データ
+
+                # デザインされたカード形式で表示
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    st.markdown(f"### 🏷️ {target_item}")
+                    st.write(f"**最終更新:** {item_data.get('日付', '不明')}")
+                    st.write(f"**担当者:** {item_data.get('作成者', '不明')}")
+                    st.info(f"**公式・基本情報:**\n\n{item_data.get('公式情報', '未登録')}")
+                
+                with c2:
+                    st.success(f"**✨ AIが提案したコピー（原文）:**\n\n{item_data.get('AIコピー', '未登録')}")
+                    st.warning(f"**✍️ 最終決定したポップ案:**\n\n{item_data.get('ポップ案', '未作成')}")
+                    
+                    # 編集のアドバイスなどを出すことも可能
+                    st.caption("※この内容はスプレッドシートから直接修正することも可能です。")
+
+            else:
+                st.warning("有効な商品名が見つかりません。")
+
+        except Exception as e:
+            st.error(f"表示エラーが発生しました。")
+            st.code(f"Error: {e}")
