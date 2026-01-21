@@ -288,7 +288,7 @@ if df is not None:
         except Exception as e:
             st.error(f"データ連携エラー: {e}")
         
-        saved_items = {row['商品名'] for row in saved_records}
+        saved_items = {row.get('商品名', '') for row in saved_records if row.get('商品名')}
         all_items = sorted(list(survey_items | saved_items))
         selected_item = st.selectbox("制作する商品を選択", all_items, key="ai_pop_selectbox")
         
@@ -308,7 +308,7 @@ if df is not None:
             st.subheader("📖 商品情報・指示")
             input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150)
             human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に")
-            run_generate = st.button("🚀 AIポップコピーを生成")
+            run_generate = st.button("🚀 AIポップコピーを生成", key="btn_generate_ai_pop")
 
         with col2:
             st.subheader("📊 顧客の声（分析結果）")
@@ -347,7 +347,7 @@ if df is not None:
             final_choice = st.text_area("採用する案をここにコピー＆ペースト（または編集）してください", 
                                         value=st.session_state["generated_copy"], height=100)
             
-            if st.button("💾 この内容をカルテに保存する"):
+            if st.button("💾 この内容をカルテに保存する", key="btn_save_karte"):
                 if current_row_idx:
                     try:
                         # 「ポップ案」がスプレッドシートの何列目にあるか指定（例: 3列目など）
