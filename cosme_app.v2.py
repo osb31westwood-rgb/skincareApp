@@ -16,7 +16,7 @@ st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 # Gemini APIの初期化
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 else:
     model = None
 
