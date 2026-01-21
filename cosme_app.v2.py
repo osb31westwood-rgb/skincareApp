@@ -224,106 +224,83 @@ if df is not None:
         st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "AIポップ生成":
-        st.header("✨ AIポップ制作")
+        st.header("✨ AIポップ案制作")
 
-        # 1. データの安全な読み込み
+        # 1. NGワード辞書の読み込みと編集機能（サイドバー）
+        ng_dict = load_ng_words()
+        
+        with st.sidebar.expander("🚫 NGワード辞書を編集"):
+            new_word = st.text_input("追加する単語", placeholder="例：最高", key="add_ng_word")
+            new_reason = st.text_input("理由/言い換え案", placeholder="例：最大級表現はNG", key="add_ng_reason")
+            
+            if st.button("➕ 辞書に追加", key="btn_add_ng"):
+                if new_word and new_reason:
+                    try:
+                        client = get_gspread_client()
+                        sh = client.open("Cosme Data")
+                        sheet_ng = sh.worksheet("NGワード辞書")
+                        sheet_ng.append_row([new_word, new_reason])
+                        st.success(f"「{new_word}」を追加しました！")
+                        st.cache_data.clear() 
+                        st.rerun()
+                    except Exception as e: st.error(f"追加失敗: {e}")
+
+            st.markdown("---")
+            st.write("📝 現在の登録リスト")
+            for word, reason in ng_dict.items():
+                col_w, col_d = st.columns([3, 1])
+                col_w.write(f"**{word}**")
+                if col_d.button("🗑️", key=f"del_ng_{word}"):
+                    try:
+                        client = get_gspread_client()
+                        sh = client.open("Cosme Data")
+                        sheet_ng = sh.worksheet("NGワード辞書")
+                        cell = sheet_ng.find(word)
+                        if cell:
+                            sheet_ng.delete_rows(cell.row)
+                            st.success("削除完了")
+                            st.cache_data.clear()
+                            st.rerun()
+                    except: st.error("削除失敗")
+
+        # 2. 商品データの取得（真っ白回避）
         survey_items = set()
         if not sub_df.empty and conf["item_col"] in sub_df.columns:
             survey_items = set(sub_df[conf["item_col"]].dropna().unique())
 
         saved_records = []
         saved_items = set()
-        
         try:
             client = get_gspread_client()
             sh = client.open("Cosme Data")
-            sheet_karte = sh.worksheet("カルテ")
-            saved_records = sheet_karte.get_all_records()
-            
-            # シートから「商品名」列のデータを安全に取り出す
-            if saved_records:
-                saved_items = {row.get('商品名') for row in saved_records if row.get('商品名')}
-        except Exception as e:
-            st.error(f"スプレッドシートの読み込みに失敗しました。シート名や列名を確認してください: {e}")
-
+            sheet_k = sh.worksheet("カルテ")
+            saved_records = sheet_k.get_all_records()
+            saved_items = {row.get('商品名', '') for row in saved_records if row.get('商品名')}
+        except: pass
+        
         all_items = sorted(list(survey_items | saved_items))
-
-        # データが1件もない場合は、真っ白回避のためにここで止める
         if not all_items:
             st.info("💡 現在、商品データが登録されていません。")
-            st.warning("スプレッドシートの『カルテ』シートに『商品名』を入力するか、アンケートを回答してください。")
-            st.stop() 
+            st.stop()
 
-        selected_item = st.selectbox("制作する商品を選択", all_items)
-
-        # 2. 選択された商品の情報を抽出
+        selected_item = st.selectbox("制作する商品を選択", all_items, key="ai_pop_selectbox")
+        
         saved_info = ""
         current_row_idx = None
         for i, row in enumerate(saved_records):
             if str(row.get('商品名')) == str(selected_item):
-                saved_info = row.get('公式情報', '') # 「公式情報」列から取得
+                saved_info = row.get('公式情報', '')
                 current_row_idx = i + 2
                 break
 
-        # --- 以下、入力エリアと生成ボタン ---
-        st.markdown("---")
-        input_info = st.text_area("商品情報（公式情報から引用）", value=saved_info, height=150)
-        human_hint = st.text_input("AIへの追加指示（例：ギフト向け、20代後半、しっとり感強調）")
-        
-        if st.button("🚀 AIポップコピーを生成"):
-            # (ここに前回の生成処理を入れる)
-            pass
-
-        ng_dict = load_ng_words()
-        
-        # 商品リストとカルテデータの取得（修正版）
-        survey_items = set(sub_df[conf["item_col"]].dropna().unique())
-        saved_records = []
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data")
-            sheet_karte = sh.worksheet("カルテ")
-            saved_records = sheet_karte.get_all_records()
-        except Exception as e:
-            st.warning(f"カルテの読み込みを待機中、またはエラー: {e}")
-            saved_records = [] # エラーが起きても空のリストを入れる
-
-        # データが1件もない場合の回避
-        if saved_records:
-            saved_items = {row.get('商品名', '') for row in saved_records if '商品名' in row}
-        else:
-            saved_items = set()
-            # 1. 商品リストとカルテデータの取得
-        survey_items = set(sub_df[conf["item_col"]].dropna().unique())
-        saved_records = []
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data") # ★スプレッドシート名を確認
-            sheet_karte = sh.worksheet("カルテ")
-            saved_records = sheet_karte.get_all_records()
-        except Exception as e:
-            st.error(f"データ連携エラー: {e}")
-        
-        saved_items = {row.get('商品名', '') for row in saved_records if row.get('商品名')}
-        all_items = sorted(list(survey_items | saved_items))
-        selected_item = st.selectbox("制作する商品を選択", all_items, key="ai_pop_selectbox")
-        
-        # 既存情報の抽出
-        saved_info = ""
-        current_row_idx = None
-        for i, row in enumerate(saved_records):
-            if row['商品名'] == selected_item:
-                saved_info = row['公式情報']
-                current_row_idx = i + 2 # ヘッダーの分+1
-                break
-
+        # 3. メインレイアウト（2カラム）
         st.markdown("---")
         col1, col2 = st.columns([1, 1])
         
         with col1:
             st.subheader("📖 商品情報・指示")
-            input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150)
-            human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に")
+            input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150, key="input_info_area")
+            human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に", key="input_hint")
             run_generate = st.button("🚀 AIポップコピーを生成", key="btn_generate_ai_pop")
 
         with col2:
@@ -331,56 +308,66 @@ if df is not None:
             item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
             if not item_stats.dropna().empty:
                 st.info(f"評価トップ: {item_stats.idxmax()}")
-                fig_spy = go.Figure(go.Scatterpolar(r=item_stats.values, theta=conf["scores"], fill='toself'))
-                fig_spy.update_layout(height=250, margin=dict(l=20, r=20, t=20, b=20))
+                import plotly.graph_objects as go
+                fig_spy = go.Figure(go.Scatterpolar(r=item_stats.values, theta=conf["scores"], fill='toself', line_color='pink'))
+                fig_spy.update_layout(height=250, margin=dict(l=30, r=30, t=20, b=20), polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
                 st.plotly_chart(fig_spy, use_container_width=True)
-                analysis_hint = f"分析結果: {item_stats.idxmax()}が高評価。"
+                analysis_hint = f"顧客分析: {item_stats.idxmax()}が特に評価されています。"
             else:
                 st.warning("アンケートデータがありません")
                 analysis_hint = "新商品として魅力を提案してください。"
 
-        # 2. 生成と保存の処理
+        # 4. 生成処理と薬機法チェック
         if run_generate:
             if model:
                 with st.spinner("AIが薬機法を考慮して生成中..."):
                     try:
-                        res = model.generate_content(f"商品:{selected_item}\n特徴:{input_info}\n要望:{human_hint}\n分析:{analysis_hint}\n薬機法を守って3案提案して。")
-                        # 生成結果を一時保存（session_state）
+                        prompt = f"""
+                        以下の情報をもとに、コスメの店頭POP用キャッチコピーを3案提案してください。
+                        【最重要】薬機法（化粧品広告ガイドライン）を遵守し、治療効果や「最高」等の誇大表現は避けてください。
+                        商品名: {selected_item}
+                        特徴: {input_info}
+                        要望: {human_hint}
+                        分析: {analysis_hint}
+                        """
+                        res = model.generate_content(prompt)
                         st.session_state["generated_copy"] = res.text
-                    except Exception as e:
-                        st.error(f"生成エラー: {e}")
+                    except Exception as e: st.error(f"生成エラー: {e}")
             else:
                 st.error("APIキーが設定されていません。")
 
-        # 3. 生成された結果の表示と保存ボタン
+        # 5. 結果表示と保存
         if "generated_copy" in st.session_state:
             st.markdown("---")
+            
+            # 💡 ここで薬機法セルフチェックを表示
+            st.subheader("⚠️ 薬機法セルフチェック（辞書照合）")
+            found_ng = False
+            for word, reason in ng_dict.items():
+                if word in st.session_state["generated_copy"]:
+                    st.error(f"**NGワード検知: 「{word}」** → {reason}")
+                    found_ng = True
+            if not found_ng:
+                st.success("✅ 現在のNG辞書に抵触する表現は見つかりませんでした。")
+
             st.success("🤖 AI提案のコピー")
             st.write(st.session_state["generated_copy"])
             
-            # --- 【重要】保存ボタンの設置 ---
             st.subheader("📝 採用案をカルテに保存")
-            final_choice = st.text_area("採用する案をここにコピー＆ペースト（または編集）してください", 
-                                        value=st.session_state["generated_copy"], height=100)
+            final_choice = st.text_area("採用・編集後のテキスト", value=st.session_state["generated_copy"], height=100)
             
             if st.button("💾 この内容をカルテに保存する", key="btn_save_karte"):
                 if current_row_idx:
                     try:
-                        # 「ポップ案」がスプレッドシートの何列目にあるか指定（例: 3列目など）
-                        # カラム名を検索して自動で列を特定
-                        headers = sheet_karte.row_values(1)
+                        headers = sheet_k.row_values(1)
                         if "ポップ案" in headers:
                             col_idx = headers.index("ポップ案") + 1
-                            sheet_karte.update_cell(current_row_idx, col_idx, final_choice)
+                            sheet_k.update_cell(current_row_idx, col_idx, final_choice)
                             st.balloons()
-                            st.success(f"「{selected_item}」のカルテにポップ案を保存しました！")
-                        else:
-                            st.error("スプレッドシートに「ポップ案」という列が見つかりません。")
-                    except Exception as e:
-                        st.error(f"保存失敗: {e}")
-                else:
-                    st.warning("この商品はカルテに登録されていないため、保存できません。先にカルテ作成をしてください。")
-
+                            st.success(f"「{selected_item}」のカルテに保存しました！")
+                        else: st.error("「ポップ案」列が見つかりません。")
+                    except Exception as e: st.error(f"保存失敗: {e}")
+                else: st.warning("先に「商品カルテ編集」からこの商品を登録してください。")
     elif menu == "商品カルテ編集":
         st.header("📋 商品カルテ：編集・管理")
 
