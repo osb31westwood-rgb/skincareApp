@@ -99,14 +99,15 @@ if df is not None:
     conf = COLUMN_CONFIG[genre]
     sub_df = df[df[COL_GENRE] == genre].copy()
     
-    # 【復活】年代絞り込み
-    ages = sorted(sub_df[COL_AGE].unique())
-    selected_ages = st.sidebar.multiselect("年代を選択", ages, default=ages)
-    
     # 【復活】種類別絞り込み
     types = sorted(sub_df[conf["type_col"]].dropna().unique())
     selected_types = st.sidebar.multiselect("種類を選択", types, default=types)
     
+    # 【復活】年代絞り込み
+    ages = sorted(sub_df[COL_AGE].unique())
+    selected_ages = st.sidebar.multiselect("年代を選択", ages, default=ages)
+    
+
     # フィルタ適用
     sub_df = sub_df[
         (sub_df[COL_AGE].isin(selected_ages)) & 
@@ -169,36 +170,37 @@ if df is not None:
 
     elif menu == "商品POPカルテ":
         st.header("📋 共有商品POPカルテ")
-        with st.expander("📝 カルテを新規保存"):
+        with st.expander("📝 カルテを新規保存", expanded=True):
             creator = st.text_input("作成者名")
-            target_item = st.selectbox("商品を選択", sorted(sub_df[conf["item_col"]].dropna().unique()), key="kt_item")
+            
+            # --- 【修正ポイント】商品名の選択方法を切り替えられるようにする ---
+            items_list = sorted(sub_df[conf["item_col"]].dropna().unique())
+            input_method = st.radio("商品の入力方法", ["既存のデータから選ぶ", "新しい商品を直接入力する"], horizontal=True)
+            
+            if input_method == "既存のデータから選ぶ" and items_list:
+                target_item = st.selectbox("商品を選択", items_list, key="kt_item_select")
+            else:
+                target_item = st.text_input("商品名を入力（新商品など）", key="kt_item_input")
+            
             ai_copy = st.text_area("AIポップコピー案（メモ）")
-            official_info = st.text_area("公式情報・成分など")
+            official_info = st.text_area("公式情報・成分・画像URLなど")
+            
             if st.button("💾 保存実行"):
-                try:
-                    client = get_gspread_client()
-                    sh = client.open("Cosme Data") # スプレッドシート名
-                    sheet = sh.worksheet("カルテ")
-                    sheet.append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), creator, target_item, ai_copy, official_info])
-                    st.success("共有スプレッドシートに保存しました！")
-                except Exception as e: st.error(f"保存失敗: {e}")
-
-        st.markdown("---")
-        st.subheader("📚 履歴一覧（削除可能）")
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data") # スプレッドシート名
-            sheet = sh.worksheet("カルテ")
-            records = sheet.get_all_records()
-            if records:
-                for i, row in enumerate(records):
-                    with st.expander(f"{row['日付']} | {row['商品名']} ({row['作成者']})"):
-                        st.write(f"**案:** {row['AIコピー']}")
-                        st.write(f"**詳細:** {row['公式情報']}")
-                        if st.button("🗑️ 削除", key=f"del_{i}"):
-                            sheet.delete_rows(i + 2)
-                            st.rerun()
-            else: st.info("保存データなし")
-        except: st.write("読込エラー")
-else:
-    st.error("データの読み込みに失敗しました。URLを確認してください。")
+                if creator and target_item:
+                    try:
+                        client = get_gspread_client()
+                        # ★ここをご自身のスプレッドシート名に書き換えてください
+                        sh = client.open("Cosme Data") 
+                        sheet = sh.worksheet("カルテ")
+                        sheet.append_row([
+                            datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                            creator, 
+                            target_item, 
+                            ai_copy, 
+                            official_info
+                        ])
+                        st.success(f"「{target_item}」の情報を保存しました！")
+                    except Exception as e: 
+                        st.error(f"保存失敗: {e}")
+                else:
+                    st.warning("作成者名と商品名を入力してください。")
