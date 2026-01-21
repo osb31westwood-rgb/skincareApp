@@ -167,7 +167,7 @@ if df is not None:
         st.subheader("📚 過去のカルテ一覧")
         try:
             client = get_gspread_client()
-            sh = client.open("あなたのスプレッドシート名") # ←重要！
+            sh = client.open("Cosme Data") # ←重要！
             sheet = sh.worksheet("カルテ")
             records = sheet.get_all_records()
             if records:
