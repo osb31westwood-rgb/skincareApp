@@ -167,51 +167,118 @@ if df is not None:
     elif menu == "AIポップ生成":
         st.header("✨ AI×人間 共同ポップ制作（薬機法チェック付）")
 
-        # 1. スプレッドシートから最新のNGワードリストを取得
+        # 1. 辞書データの読み込み
         ng_dict = load_ng_words()
 
-        # (中略：商品選択や情報編集エリアは前回のコードと同じ)
-        # ... [商品リスト取得などの処理] ...
+        # --- 【管理機能】サイドバーでNGワード辞書を編集 ---
+        with st.sidebar.expander("🚫 NGワード辞書を編集"):
+            new_word = st.text_input("追加する単語", placeholder="例：最高")
+            new_reason = st.text_input("理由/言い換え案", placeholder="例：最大級表現はNG")
+            
+            if st.button("➕ 辞書に追加"):
+                if new_word and new_reason:
+                    try:
+                        client = get_gspread_client()
+                        sh = client.open("Cosme Data") # ★シート名確認
+                        sheet = sh.worksheet("NGワード辞書")
+                        sheet.append_row([new_word, new_reason])
+                        st.success(f"「{new_word}」を追加しました！")
+                        st.cache_data.clear() 
+                        st.rerun()
+                    except Exception as e: st.error(f"追加失敗: {e}")
 
-        # 5. AI生成実行
-        if st.button("🚀 この内容でAIコピーを生成"):
-            # プロンプト作成（前回同様）
+            st.markdown("---")
+            st.write("📝 現在の登録リスト")
+            for word, reason in ng_dict.items():
+                col_w, col_d = st.columns([3, 1])
+                col_w.write(f"**{word}**")
+                if col_d.button("🗑️", key=f"del_ng_{word}"):
+                    try:
+                        client = get_gspread_client()
+                        sh = client.open("Cosme Data")
+                        sheet = sh.worksheet("NGワード辞書")
+                        cell = sheet.find(word)
+                        sheet.delete_rows(cell.row)
+                        st.success("削除しました")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except: st.error("削除失敗")
+
+        # --- メイン画面：制作エリア ---
+        # 商品リストの作成
+        survey_items = set(sub_df[conf["item_col"]].dropna().unique())
+        saved_records = []
+        try:
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet = sh.worksheet("カルテ")
+            saved_records = sheet.get_all_records()
+        except: pass
+        
+        saved_items = {row['商品名'] for row in saved_records}
+        all_items = sorted(list(survey_items | saved_items))
+        
+        selected_item = st.selectbox("制作する商品を選択", all_items)
+        
+        # カルテから情報を自動取得
+        saved_info = ""
+        for row in saved_records:
+            if row['商品名'] == selected_item:
+                saved_info = row['公式情報']
+                break
+
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📖 商品情報（編集してAIに送る）")
+            input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=200)
+            human_hint = st.text_input("AIへの追加指示", placeholder="例：20代向けにキャッチーに、等")
+
+        with col2:
+            st.subheader("📊 顧客の声（分析結果）")
+            item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
+            if not item_stats.dropna().empty:
+                st.write(f"評価トップ: **{item_stats.idxmax()}**")
+                st.bar_chart(item_stats)
+                analysis_hint = f"顧客満足度調査では{item_stats.idxmax()}が最も評価されています。"
+            else:
+                st.info("アンケートデータなし（新商品として生成します）")
+                analysis_hint = "新商品のため、商品名から魅力を推測してください。"
+
+        # 生成実行
+        if st.button("🚀 AIポップコピーを生成"):
             prompt = f"""
             以下の情報をもとに、コスメの店頭POP用キャッチコピーを3案提案してください。
-            【重要】化粧品広告のガイドライン（薬機法）を厳守してください。
+            【重要】化粧品広告のガイドライン（薬機法）を遵守し、過大な表現は避けてください。
             ■商品名: {selected_item}
-            ■特徴: {input_info}
-            ■要望: {human_hint}
+            ■商品の特徴・成分: {input_info}
+            ■分析結果: {analysis_hint}
+            ■追加要望: {human_hint}
             """
             
             if model:
-                with st.spinner("薬機法を考慮して生成中..."):
+                with st.spinner("AIが薬機法と顧客の声を分析中..."):
                     res = model.generate_content(prompt)
                     generated_text = res.text
                     
-                    st.success("🤖 AIからの提案")
-                    
-                    # --- 【強化】スプレッドシート連動のNGチェック ---
+                    # 薬機法（NGワード）チェック
                     st.markdown("---")
-                    st.subheader("⚠️ 現場判断による表現チェック")
-                    
+                    st.subheader("⚠️ 薬機法セルフチェック")
                     found_ng = False
-                    # スプレッドシートから取得した単語でチェック
                     for word, reason in ng_dict.items():
                         if word in generated_text:
-                            st.error(f"**NGワード検知: 「{word}」**\n\n💡 {reason}")
+                            st.error(f"**NGワード検知: 「{word}」** → {reason}")
                             found_ng = True
                     
                     if not found_ng:
-                        if not ng_dict:
-                            st.warning("NGワード辞書が読み込めなかったか、空です。")
-                        else:
-                            st.success("現在の辞書に基づいたチェックでは問題ありません。")
+                        st.success("現在の辞書に基づいたチェックでは、NGワードは見つかりませんでした。")
                     
                     st.markdown("---")
-                    st.markdown(generated_text) # 生成コピーを表示
+                    st.success("🤖 AI提案のコピー")
+                    st.markdown(generated_text)
             else:
-                st.warning("APIキー未設定です。")
+                st.error("APIキーが正しく設定されていません。")
 
     elif menu == "商品POPカルテ":
         st.header("📋 共有商品POPカルテ")
