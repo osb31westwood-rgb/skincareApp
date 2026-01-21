@@ -13,11 +13,18 @@ from datetime import datetime
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 
-# --- コードの前半（menuの分岐の前など）に配置 ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # モデル名を一時的に 'gemini-pro' にしてテスト
-    model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+    try:
+        # 使えるモデルをリストアップして、flashが含まれるものを探す
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # 'gemini-1.5-flash' があればそれを、なければリストの最初を使う
+        target_model = 'models/gemini-1.5-flash' if 'models/gemini-1.5-flash' in available_models else available_models[0]
+        model = genai.GenerativeModel(target_model)
+        # st.write(f"DEBUG: 選択されたモデル: {target_model}") # 動作確認用
+    except Exception as e:
+        st.error(f"モデルリスト取得エラー: {e}")
+        model = genai.GenerativeModel('gemini-1.5-flash') # 失敗したらデフォルト
 else:
     model = None
 
