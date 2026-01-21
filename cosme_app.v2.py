@@ -290,7 +290,7 @@ if df is not None:
         
         saved_items = {row['商品名'] for row in saved_records}
         all_items = sorted(list(survey_items | saved_items))
-        selected_item = st.selectbox("制作する商品を選択", all_items)
+        selected_item = st.selectbox("制作する商品を選択", all_items, key="ai_pop_selectbox")
         
         # 既存情報の抽出
         saved_info = ""
