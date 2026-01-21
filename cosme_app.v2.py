@@ -200,7 +200,7 @@ if df is not None:
         fig = px.scatter(sub_df, x=x_ax, y=y_ax, color=COL_AGE, hover_name=conf["item_col"], color_discrete_sequence=theme_colors)
         st.plotly_chart(fig, use_container_width=True)
 
-   elif menu == "AIポップ生成":
+    elif menu == "AIポップ生成":
         st.header("✨ AI×人間 共同ポップ制作（薬機法チェック付）")
 
         ng_dict = load_ng_words()
