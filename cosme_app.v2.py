@@ -142,18 +142,53 @@ if df is not None:
             st.image(buf.getvalue(), width=300, caption="スマホで読み取って回答")
             st.write(f"URL: [回答リンク]({full_url})")
 
-    elif menu == "レーダーチャート比較":
+   elif menu == "レーダーチャート比較":
         st.header(f"📊 スパイダー分析 ({selected_theme})")
+        
+        # --- 【新機能】グリッド切り替えスイッチ ---
+        col_chart1, col_chart2 = st.columns([2, 1])
+        with col_chart2:
+            st.write("🔧 チャート設定")
+            show_grid = st.toggle("グリッド線を表示", value=True)
+            show_axis = st.toggle("軸ラベルを表示", value=True)
+
         items = sorted(sub_df[conf["item_col"]].dropna().unique())
         selected_items = st.multiselect("比較する商品を選択", items)
+        
         if selected_items:
             fig = go.Figure()
             valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
+            
             for i, item in enumerate(selected_items):
                 item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
                 color = theme_colors[i % len(theme_colors)]
-                fig.add_trace(go.Scatterpolar(r=item_data.values, theta=valid_scores, fill='toself', name=item, line=dict(color=color), fillcolor=color, opacity=0.5))
-            fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), paper_bgcolor="rgba(0,0,0,0)")
+                fig.add_trace(go.Scatterpolar(
+                    r=item_data.values, 
+                    theta=valid_scores, 
+                    fill='toself', 
+                    name=item, 
+                    line=dict(color=color), 
+                    fillcolor=color, 
+                    opacity=0.5
+                ))
+            
+            # --- スイッチの状態を反映 ---
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=show_grid, # グリッド（円）の表示
+                        range=[0, 5],
+                        showticklabels=show_axis # 数字ラベルの表示
+                    ),
+                    angularaxis=dict(
+                        visible=show_grid, # スポーク（放射状の線）の表示
+                        showticklabels=show_axis # 項目名の表示
+                    )
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=True
+            )
             st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "分布図分析":
