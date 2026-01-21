@@ -13,10 +13,11 @@ from datetime import datetime
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 
-# Gemini APIの初期化
+# --- コードの前半（menuの分岐の前など）に配置 ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # モデル名を一時的に 'gemini-pro' にしてテスト
+    model = genai.GenerativeModel('gemini-pro') 
 else:
     model = None
 
