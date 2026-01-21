@@ -208,7 +208,55 @@ if df is not None:
         st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "AIポップ生成":
-        st.header("✨ AI×人間 共同ポップ制作（保存機能付）")
+        st.header("✨ AIポップ制作")
+
+        # 1. データの安全な読み込み
+        survey_items = set()
+        if not sub_df.empty and conf["item_col"] in sub_df.columns:
+            survey_items = set(sub_df[conf["item_col"]].dropna().unique())
+
+        saved_records = []
+        saved_items = set()
+        
+        try:
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet_karte = sh.worksheet("カルテ")
+            saved_records = sheet_karte.get_all_records()
+            
+            # シートから「商品名」列のデータを安全に取り出す
+            if saved_records:
+                saved_items = {row.get('商品名') for row in saved_records if row.get('商品名')}
+        except Exception as e:
+            st.error(f"スプレッドシートの読み込みに失敗しました。シート名や列名を確認してください: {e}")
+
+        all_items = sorted(list(survey_items | saved_items))
+
+        # データが1件もない場合は、真っ白回避のためにここで止める
+        if not all_items:
+            st.info("💡 現在、商品データが登録されていません。")
+            st.warning("スプレッドシートの『カルテ』シートに『商品名』を入力するか、アンケートを回答してください。")
+            st.stop() 
+
+        selected_item = st.selectbox("制作する商品を選択", all_items)
+
+        # 2. 選択された商品の情報を抽出
+        saved_info = ""
+        current_row_idx = None
+        for i, row in enumerate(saved_records):
+            if str(row.get('商品名')) == str(selected_item):
+                saved_info = row.get('公式情報', '') # 「公式情報」列から取得
+                current_row_idx = i + 2
+                break
+
+        # --- 以下、入力エリアと生成ボタン ---
+        st.markdown("---")
+        input_info = st.text_area("商品情報（公式情報から引用）", value=saved_info, height=150)
+        human_hint = st.text_input("AIへの追加指示（例：ギフト向け、20代後半、しっとり感強調）")
+        
+        if st.button("🚀 AIポップコピーを生成"):
+            # (ここに前回の生成処理を入れる)
+            pass
 
         ng_dict = load_ng_words()
         
