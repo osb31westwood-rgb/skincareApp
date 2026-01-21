@@ -106,7 +106,7 @@ df = load_data()
 
 # サイドバー基本設定
 st.sidebar.title("💄 Cosme Management")
-menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品POP編集","商品カルテ一覧"])
+menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品カルテ編集","商品カルテ一覧"])
 selected_theme = st.sidebar.selectbox("📊 配色テーマ", list(COLOR_PALETTES.keys()))
 theme_colors = COLOR_PALETTES[selected_theme]
 
