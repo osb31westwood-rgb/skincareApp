@@ -144,12 +144,28 @@ if df is not None:
             type_id = COLUMN_CONFIG[q_genre]["form_id"]
             params = urllib.parse.urlencode({"entry.500746217": q_genre, type_id: q_type, "entry.1507235458": q_item})
             full_url = f"https://docs.google.com/forms/d/e/1FAIpQLSdBubITUy2hWaM8z9Ryo4QV6qKF0A1cnUnFEM49E6tdf8JeXw/viewform?usp=pp_url&{params}"
+            
+            # QRコード生成
             qr = qrcode.make(full_url)
             buf = BytesIO()
-            qr.save(buf)
-            st.image(buf.getvalue(), width=300, caption="スマホで読み取って回答")
-            st.write(f"URL: [回答リンク]({full_url})")
+            qr.save(buf, format="PNG") # フォーマットを指定
+            byte_im = buf.getvalue()
 
+            # 表示
+            st.image(byte_im, width=300, caption="スマホで読み取って回答")
+            
+            # --- ここから追加・修正 ---
+            st.markdown("#### 📄 このURLをコピー")
+            st.code(full_url, language="text") # クリックでコピー可能
+
+            st.download_button(
+                label="📥 QRコードを画像として保存",
+                data=byte_im,
+                file_name=f"QR_{q_item}.png",
+                mime="image/png",
+                key="download_qr"
+            )
+            # ------------------------
     elif menu == "レーダーチャート比較":
         st.header(f"📊 スパイダー分析 ({selected_theme})")
         
