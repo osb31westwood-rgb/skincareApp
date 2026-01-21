@@ -208,28 +208,32 @@ if df is not None:
         st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "AIポップ生成":
-        st.header("✨ AI×人間 共同ポップ制作（薬機法チェック付）")
+        st.header("✨ AI×人間 共同ポップ制作（保存機能付）")
 
         ng_dict = load_ng_words()
         
-        # 商品リスト作成
+        # 1. 商品リストとカルテデータの取得
         survey_items = set(sub_df[conf["item_col"]].dropna().unique())
         saved_records = []
         try:
             client = get_gspread_client()
-            sh = client.open("Cosme Data")
-            sheet = sh.worksheet("カルテ")
-            saved_records = sheet.get_all_records()
-        except: pass
+            sh = client.open("Cosme Data") # ★スプレッドシート名を確認
+            sheet_karte = sh.worksheet("カルテ")
+            saved_records = sheet_karte.get_all_records()
+        except Exception as e:
+            st.error(f"データ連携エラー: {e}")
         
         saved_items = {row['商品名'] for row in saved_records}
         all_items = sorted(list(survey_items | saved_items))
         selected_item = st.selectbox("制作する商品を選択", all_items)
         
+        # 既存情報の抽出
         saved_info = ""
-        for row in saved_records:
+        current_row_idx = None
+        for i, row in enumerate(saved_records):
             if row['商品名'] == selected_item:
                 saved_info = row['公式情報']
+                current_row_idx = i + 2 # ヘッダーの分+1
                 break
 
         st.markdown("---")
@@ -238,50 +242,63 @@ if df is not None:
         with col1:
             st.subheader("📖 商品情報・指示")
             input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150)
-            human_hint = st.text_input("AIへの追加指示")
+            human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に")
             run_generate = st.button("🚀 AIポップコピーを生成")
 
         with col2:
-            st.subheader("📊 顧客の声（分析視覚化）")
+            st.subheader("📊 顧客の声（分析結果）")
             item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
             if not item_stats.dropna().empty:
-                tab1, tab2 = st.tabs(["スパイダー", "分布推移"])
-                with tab1:
-                    fig_spy = go.Figure(go.Scatterpolar(r=item_stats.values, theta=conf["scores"], fill='toself'))
-                    fig_spy.update_layout(height=300, polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
-                    st.plotly_chart(fig_spy, use_container_width=True)
-                with tab2:
-                    fig_scat = px.scatter(sub_df, x=conf["scores"][0], y=conf["scores"][-1], opacity=0.3)
-                    st.plotly_chart(fig_scat, use_container_width=True)
+                st.info(f"評価トップ: {item_stats.idxmax()}")
+                fig_spy = go.Figure(go.Scatterpolar(r=item_stats.values, theta=conf["scores"], fill='toself'))
+                fig_spy.update_layout(height=250, margin=dict(l=20, r=20, t=20, b=20))
+                st.plotly_chart(fig_spy, use_container_width=True)
                 analysis_hint = f"分析結果: {item_stats.idxmax()}が高評価。"
             else:
-                st.info("データなし")
-                analysis_hint = "新商品として提案してください。"
+                st.warning("アンケートデータがありません")
+                analysis_hint = "新商品として魅力を提案してください。"
 
-        # --- ここが問題の319行目付近のブロック ---
+        # 2. 生成と保存の処理
         if run_generate:
             if model:
-                with st.spinner("AI生成中..."):
+                with st.spinner("AIが薬機法を考慮して生成中..."):
                     try:
                         res = model.generate_content(f"商品:{selected_item}\n特徴:{input_info}\n要望:{human_hint}\n分析:{analysis_hint}\n薬機法を守って3案提案して。")
-                        generated_text = res.text
-                        
-                        st.markdown("---")
-                        st.subheader("⚠️ 薬機法チェック")
-                        found_ng = False
-                        for word, reason in ng_dict.items():
-                            if word in generated_text:
-                                st.error(f"**NGワード: {word}** ({reason})")
-                                found_ng = True
-                        if not found_ng: st.success("NGワードなし")
-                        
-                        st.markdown("---")
-                        st.success("🤖 AI提案")
-                        st.write(generated_text)
+                        # 生成結果を一時保存（session_state）
+                        st.session_state["generated_copy"] = res.text
                     except Exception as e:
                         st.error(f"生成エラー: {e}")
             else:
                 st.error("APIキーが設定されていません。")
+
+        # 3. 生成された結果の表示と保存ボタン
+        if "generated_copy" in st.session_state:
+            st.markdown("---")
+            st.success("🤖 AI提案のコピー")
+            st.write(st.session_state["generated_copy"])
+            
+            # --- 【重要】保存ボタンの設置 ---
+            st.subheader("📝 採用案をカルテに保存")
+            final_choice = st.text_area("採用する案をここにコピー＆ペースト（または編集）してください", 
+                                        value=st.session_state["generated_copy"], height=100)
+            
+            if st.button("💾 この内容をカルテに保存する"):
+                if current_row_idx:
+                    try:
+                        # 「ポップ案」がスプレッドシートの何列目にあるか指定（例: 3列目など）
+                        # カラム名を検索して自動で列を特定
+                        headers = sheet_karte.row_values(1)
+                        if "ポップ案" in headers:
+                            col_idx = headers.index("ポップ案") + 1
+                            sheet_karte.update_cell(current_row_idx, col_idx, final_choice)
+                            st.balloons()
+                            st.success(f"「{selected_item}」のカルテにポップ案を保存しました！")
+                        else:
+                            st.error("スプレッドシートに「ポップ案」という列が見つかりません。")
+                    except Exception as e:
+                        st.error(f"保存失敗: {e}")
+                else:
+                    st.warning("この商品はカルテに登録されていないため、保存できません。先にカルテ作成をしてください。")
 
 elif menu == "商品POPカルテ":
     st.header("📋 共有商品POPカルテ")
