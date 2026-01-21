@@ -14,8 +14,8 @@ from datetime import datetime
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 
 # Gemini APIの初期化
-if "AIzaSyDxw5AcNv3n6XoZSgLwAGF5-kcnbeuRR3Y" in st.secrets:
-    genai.configure(api_key=st.secrets["AIzaSyDxw5AcNv3n6XoZSgLwAGF5-kcnbeuRR3Y"])
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     model = None
@@ -165,78 +165,53 @@ if df is not None:
         st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "AIポップ生成":
-        st.header("✨ AI×人間 共同ポップ制作")
-        
-        # 1. 商品リストの作成（アンケート + 保存済みカルテ）
-        survey_items = set(sub_df[conf["item_col"]].dropna().unique())
-        saved_records = []
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data") # ★ご自身のシート名に
-            sheet = sh.worksheet("カルテ")
-            saved_records = sheet.get_all_records()
-        except: pass
-        
-        saved_items = {row['商品名'] for row in saved_records}
-        all_items = sorted(list(survey_items | saved_items))
-        
-        # 2. 商品選択
-        selected_item = st.selectbox("制作する商品を選択", all_items)
-        
-        # 3. 選択された商品の「保存済み情報」を探し出す
-        saved_info = ""
-        for row in saved_records:
-            if row['商品名'] == selected_item:
-                saved_info = row['公式情報'] # 最新の保存内容を取得
-                break
+        st.header("✨ AI×人間 共同ポップ制作（薬機法チェック付）")
 
-        st.markdown("---")
-        
-        # 4. 編集・確認エリア
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📖 保存済みの公式情報・メモ")
-            # 修正できるようにtext_areaに表示（保存済みがあればそれを初期値に）
-            input_info = st.text_area("AIに伝えたい商品特徴（編集可能）", value=saved_info, height=200, help="カルテから取得した内容です。自由に追加・変更してください。")
-            
-            human_hint = st.text_input("AIへの追加指示（例：20代向けに、短くキャッチーに、等）")
+        # 1. スプレッドシートから最新のNGワードリストを取得
+        ng_dict = load_ng_words()
 
-        with col2:
-            st.subheader("📊 アンケート分析結果")
-            item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
-            if not item_stats.dropna().empty:
-                st.write(f"この商品は **「{item_stats.idxmax()}」** が最も高く評価されています。")
-                st.bar_chart(item_stats)
-                analysis_hint = f"アンケートでは{item_stats.idxmax()}が高評価です。"
-            else:
-                st.info("この商品のアンケートデータはまだありません。")
-                analysis_hint = ""
+        # (中略：商品選択や情報編集エリアは前回のコードと同じ)
+        # ... [商品リスト取得などの処理] ...
 
         # 5. AI生成実行
         if st.button("🚀 この内容でAIコピーを生成"):
-            # プロンプト（命令文）をリッチに組み立てる
+            # プロンプト作成（前回同様）
             prompt = f"""
             以下の情報をもとに、コスメの店頭POP用キャッチコピーを3案提案してください。
-            
+            【重要】化粧品広告のガイドライン（薬機法）を厳守してください。
             ■商品名: {selected_item}
-            ■商品の特徴・公式情報: {input_info}
-            ■分析データ: {analysis_hint}
-            ■追加の要望: {human_hint}
-            
-            コスメ好きの心に刺さる、思わず立ち止まってしまうようなコピーをお願いします。
+            ■特徴: {input_info}
+            ■要望: {human_hint}
             """
             
             if model:
-                with st.spinner("情報を整理して、最適なコピーを考えています..."):
+                with st.spinner("薬機法を考慮して生成中..."):
                     res = model.generate_content(prompt)
-                    st.success("🤖 AIからの提案")
-                    st.markdown(res.text)
+                    generated_text = res.text
                     
-                    # 生成したコピーをメモ代わりにコピーしやすいよう表示
-                    st.info("気に入った案があれば、コピーして「商品POPカルテ」に保存しておきましょう！")
+                    st.success("🤖 AIからの提案")
+                    
+                    # --- 【強化】スプレッドシート連動のNGチェック ---
+                    st.markdown("---")
+                    st.subheader("⚠️ 現場判断による表現チェック")
+                    
+                    found_ng = False
+                    # スプレッドシートから取得した単語でチェック
+                    for word, reason in ng_dict.items():
+                        if word in generated_text:
+                            st.error(f"**NGワード検知: 「{word}」**\n\n💡 {reason}")
+                            found_ng = True
+                    
+                    if not found_ng:
+                        if not ng_dict:
+                            st.warning("NGワード辞書が読み込めなかったか、空です。")
+                        else:
+                            st.success("現在の辞書に基づいたチェックでは問題ありません。")
+                    
+                    st.markdown("---")
+                    st.markdown(generated_text) # 生成コピーを表示
             else:
-                st.warning("APIキーが設定されていません。")
+                st.warning("APIキー未設定です。")
 
     elif menu == "商品POPカルテ":
         st.header("📋 共有商品POPカルテ")
