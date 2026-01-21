@@ -106,7 +106,7 @@ df = load_data()
 
 # サイドバー基本設定
 st.sidebar.title("💄 Cosme Management")
-menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品POPカルテ"])
+menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品POP編集","商品カルテ一覧"])
 selected_theme = st.sidebar.selectbox("📊 配色テーマ", list(COLOR_PALETTES.keys()))
 theme_colors = COLOR_PALETTES[selected_theme]
 
@@ -365,7 +365,75 @@ if df is not None:
                 else:
                     st.warning("この商品はカルテに登録されていないため、保存できません。先にカルテ作成をしてください。")
 
-    elif menu == "商品POPカルテ":
+    elif menu == "商品カルテ編集":
+        st.header("📋 商品カルテ：編集・管理")
+
+        try:
+            # 1. スプレッドシートからの読み込み
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet_karte = sh.worksheet("カルテ")
+            records = sheet_karte.get_all_records()
+            df_karte = pd.DataFrame(records) if records else pd.DataFrame()
+
+            # 2. モード選択：新規 or 既存
+            mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
+
+            # 初期値の準備
+            target_item_name = ""
+            official_info_val = ""
+            memo_val = ""
+
+            if mode == "既存データから選んで編集":
+                if not df_karte.empty and "商品名" in df_karte.columns:
+                    item_list = [n for n in df_karte["商品名"].unique() if n]
+                    selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
+                    
+                    # 選択した商品の最新データを取得
+                    latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
+                    target_item_name = selected_name
+                    official_info_val = latest_row.get("公式情報", "")
+                    # 「メモ」という列がある前提（なければ空）
+                    memo_val = latest_row.get("メモ", "") 
+                else:
+                    st.warning("既存データがありません。「新規カルテ作成」を選んでください。")
+            
+            st.markdown("---")
+            
+            # 3. 入力エリア（新規・既存共通）
+            st.subheader(f"🖋️ {mode}")
+            
+            edit_item_name = st.text_input("商品名", value=target_item_name)
+            edit_official_info = st.text_area("公式情報（特徴・成分など）", value=official_info_val, height=150)
+            edit_memo = st.text_area("スタッフメモ・備考（ターゲット層や接客のヒント）", value=memo_val, height=100)
+
+            if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
+                if not edit_item_name:
+                    st.error("商品名を入力してください。")
+                else:
+                    import datetime
+                    new_row = [
+                        str(datetime.date.today()), # 日付
+                        "スタッフ",                 # 作成者（仮）
+                        edit_item_name,             # 商品名
+                        "",                         # AIコピー（ここでは空）
+                        edit_official_info,         # 公式情報
+                        "",                         # ポップ案（ここでは空）
+                        edit_memo                   # メモ（スプレッドシートに列を増やしてください）
+                    ]
+                    sheet_karte.append_row(new_row)
+                    st.success(f"「{edit_item_name}」の情報を保存しました！")
+                    st.balloons()
+
+            # 4. 全体の一覧も下に見えるようにしておく
+            if not df_karte.empty:
+                with st.expander("📂 現在のカルテ一覧を表示"):
+                    st.dataframe(df_karte, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"エラーが発生しました: {e}")
+            
+    elif menu == "商品カルテ一覧":
         st.header("📋 登録済み商品カルテ一覧")
 
         try:
