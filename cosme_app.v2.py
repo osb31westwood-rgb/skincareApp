@@ -367,54 +367,43 @@ if df is not None:
 
 elif menu == "商品POPカルテ":
         st.header("📋 登録済み商品カルテ一覧")
-
+        
+        # 1. 接続テスト
         try:
             client = get_gspread_client()
             sh = client.open("Cosme Data")
             sheet_karte = sh.worksheet("カルテ")
             records = sheet_karte.get_all_records()
-
-            if not records:
-                st.info("💡 現在、カルテに登録されているデータはありません。")
-                st.stop() # ここで止めることで、下の検索処理に進ませない
-
-            import pandas as pd
-            df_karte = pd.DataFrame(records)
-
-            # 列名の存在チェックと表示
-            target_cols = ["日付", "作成者", "商品名", "AIコピー", "公式情報", "ポップ案"]
-            display_cols = [c for c in target_cols if c in df_karte.columns]
-            
-            st.subheader("現在の登録内容")
-            st.dataframe(df_karte[display_cols], use_container_width=True)
-
-            # 3. 検索・詳細表示（ここを安全に！）
-            st.markdown("---")
-            # 商品名が空のものは除外してリスト化
-            item_list = [name for name in df_karte["商品名"].unique() if name]
-            
-            if item_list:
-                search_item = st.selectbox("詳細を確認する商品を選択", item_list, key="karte_detail_select")
-                
-                # 検索結果を安全に取得
-                matching_rows = df_karte[df_karte["商品名"] == search_item]
-                
-                if not matching_rows.empty:
-                    detail_row = matching_rows.iloc[0]
-                    
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"**作成者:** {detail_row.get('作成者', '不明')}")
-                        st.markdown("**📖 公式情報:**")
-                        st.info(detail_row.get('公式情報', '未登録'))
-                    with c2:
-                        st.markdown("**✨ 最新のポップ案:**")
-                        st.success(detail_row.get('ポップ案', '未作成'))
-                else:
-                    st.warning("選択された商品の詳細が見つかりませんでした。")
-            else:
-                st.warning("有効な商品名が登録されていません。")
-
         except Exception as e:
-            st.error("カルテの表示中にエラーが発生しました。")
-            st.code(e) # エラー内容を画面に表示して原因を特定しやすくする
+            st.error(f"スプレッドシートにアクセスできません: {e}")
+            st.stop()
+
+        # 2. データが空の場合
+        if not records:
+            st.info("💡 スプレッドシート『カルテ』にデータがありません。1行目（見出し）だけがある状態か確認してください。")
+            st.stop()
+
+        # 3. データの表示
+        import pandas as pd
+        df_karte = pd.DataFrame(records)
+        
+        st.subheader("現在の登録内容")
+        # 列が存在するか確認してから表示
+        cols = [c for c in ["商品名", "公式情報", "ポップ案"] if c in df_karte.columns]
+        if cols:
+            st.dataframe(df_karte[cols], use_container_width=True)
+        else:
+            st.write("表示できる列（商品名など）が見つかりません。")
+
+        # 4. 詳細検索（極限までシンプルに）
+        if "商品名" in df_karte.columns:
+            st.markdown("---")
+            search_item = st.selectbox("詳細を確認する商品", df_karte["商品名"].unique(), key="simple_karte_select")
+            
+            # 該当行を抽出
+            detail = df_karte[df_karte["商品名"] == search_item]
+            if not detail.empty:
+                row = detail.iloc[0]
+                st.write(f"**商品名:** {search_item}")
+                st.info(f"**公式情報:** {row.get('公式情報', '未登録')}")
+                st.success(f"**ポップ案:** {row.get('ポップ案', '未登録')}")
