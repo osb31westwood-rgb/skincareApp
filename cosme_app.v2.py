@@ -727,139 +727,102 @@ elif menu == "📚 商品カルテ一覧":
             st.error(f"表示エラー: {e}")
             
             
-elif menu == "📈 アンケート分析":
+elif menu == "📊 分析（チャート）":
     st.header("📊 アンケートデータ詳細分析")
     
-    # データの存在チェック
     if sub_df.empty:
-        st.warning("⚠️ 現在の絞り込み条件に一致するデータがありません。サイドバーで条件を変更してください。")
+        st.warning("⚠️ 現在の絞り込み条件に一致するデータがありません。")
     else:
-        # タブの設定
-        tab1, tab2 = st.tabs(["📈 スコア分析", "💬 自由記述・生の声"])
+        # メインのタブを3つに分割
+        tab1, tab2, tab3 = st.tabs(["📈 スコア分析", "🗣️ 全体の感想・不満分析", "🔍 その他項目の内訳確認"])
 
+        # --- Tab 1: スコア分析（チャート・分布図） ---
         with tab1:
             st.subheader("📊 多角的な評価分析")
-            
-            # --- 1. 商品選択と性別フィルター ---
             target_items = sorted(sub_df[conf["item_col"]].dropna().unique())
             col_sel1, col_sel2 = st.columns(2)
             with col_sel1:
-                selected_analysis_item = st.selectbox("分析する商品を選択", target_items, key="analysis_item_select")
+                selected_analysis_item = st.selectbox("分析する商品を選択", target_items, key="ans_item_select")
             with col_sel2:
-                gender_target = st.radio("表示対象", ["全て", "女性", "男性", "回答しない／その他"], horizontal=True)
+                gender_target = st.radio("表示対象", ["全て", "女性", "男性", "回答しない／その他"], horizontal=True, key="ans_gender_radio")
 
-            # データの計算
             item_data = sub_df[sub_df[conf["item_col"]] == selected_analysis_item]
             if gender_target != "全て":
                 item_data = item_data[item_data["性別"] == gender_target]
 
-            # --- 2. 2カラムで「チャート」と「分布」を並べる ---
             chart_col, dist_col = st.columns([1, 1])
-
             with chart_col:
                 st.write("📌 平均評価（バランス）")
                 item_stats = item_data[conf["scores"]].mean()
                 if not item_stats.dropna().empty:
                     import plotly.graph_objects as go
-                    # チャートを閉じる処理
                     r_values = list(item_stats.values) + [item_stats.values[0]]
                     theta_values = list(conf["scores"]) + [conf["scores"][0]]
-
-                    fig_spy = go.Figure(go.Scatterpolar(
-                        r=r_values, theta=theta_values, fill='toself',
-                        line_color=theme_colors[0] if 'theme_colors' in locals() else 'pink'
-                    ))
+                    fig_spy = go.Figure(go.Scatterpolar(r=r_values, theta=theta_values, fill='toself', 
+                                                       line_color=theme_colors[0] if 'theme_colors' in locals() else 'pink'))
                     fig_spy.update_layout(height=300, margin=dict(l=20,r=20,t=20,b=20), polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
                     st.plotly_chart(fig_spy, use_container_width=True)
-                else:
-                    st.warning("データ不足")
+                else: st.warning("データ不足")
 
             with dist_col:
                 st.write("📌 評価のバラツキ（分布）")
-                # スコアを縦持ちに変換して分布図を作成
                 dist_data = item_data[conf["scores"]].melt(var_name="項目", value_name="スコア")
                 if not dist_data.empty:
                     import plotly.express as px
-                    fig_dist = px.box(
-                        dist_data, x="項目", y="スコア",
-                        points="all", # 全データ点を表示
-                        color_discrete_sequence=[theme_colors[0]] if 'theme_colors' in locals() else ['pink']
-                    )
+                    fig_dist = px.box(dist_data, x="項目", y="スコア", points="all",
+                                     color_discrete_sequence=[theme_colors[0]] if 'theme_colors' in locals() else ['pink'])
                     fig_dist.update_layout(height=300, margin=dict(l=20,r=20,t=20,b=20), yaxis=dict(range=[0, 5.5]))
                     st.plotly_chart(fig_dist, use_container_width=True)
 
-            # --- 3. 分析のヒント表示 ---
-            # --- 3. 分析のヒント表示 ---
             if not item_stats.dropna().empty:
-                # 最大値を調べる
                 max_val = item_stats.max()
-                # 最大値と同じ値を持つ項目をすべて抽出
                 top_scores = item_stats[item_stats == max_val].index.tolist()
-                
-                # 項目名を「・」でつなげる（例：保湿・香り・コスパ）
-                top_scores_str = " ・ ".join(top_scores)
-                
-                st.success(f"💡 分析ヒント: この商品は **{top_scores_str}** が最も評価されています（評価スコア: {max_val:.1f}）。")
-                
-                if len(top_scores) > 1:
-                    st.caption("✨ 複数の強みがある多機能な商品です！POPではこれらを組み合わせた訴求がおすすめ。")
-        
-       with tab2:
-            # 内部タブを「その他確認」と「感想・不満の全件分析」に分ける
-            sub_tab_etc, sub_tab_voice = st.tabs(["🔍 その他項目の内訳確認", "🗣️ 全データの感想・不満分析"])
-            
-            # 列名の定義
-            other_col = "商品のアイテムタイプにて『その他』を選んだ方は入力してください。"
-            feedback_col = "ご感想やご不満点がございましたら、ご自由にご入力ください。"
+                st.success(f"💡 分析ヒント: この商品は **{' ・ '.join(top_scores)}** が最も評価されています。")
 
-            # --- 1. 【その他】タブ：分類漏れの確認専用 ---
-            with sub_tab_etc:
-                st.markdown("#### 🔍 分類不能データの正体を確認")
-                st.caption("ジャンルやタイプで『その他』を選んだ人の記述です。新ジャンルの検討などに使います。")
-                
-                # 「その他」の記述がある行だけを表示
-                others_df = sub_df[sub_df[other_col].fillna("").str.strip() != ""]
-                
+        # --- Tab 2: 感想・不満分析（全件・絞り込み） ---
+        with tab2:
+            st.subheader("🗣️ 全ジャンル・全アイテムの生の声")
+            feedback_col = "ご感想やご不満点がございましたら、ご自由にご入力ください。"
+            voice_base_df = sub_df[sub_df[feedback_col].fillna("").str.strip() != ""]
+
+            with st.expander("🛠️ 詳細フィルタで声を絞り込む", expanded=True):
+                c1, c2 = st.columns(2)
+                with c1:
+                    f_items = st.multiselect("特定の商品", sorted(voice_base_df["商品名"].unique()), key="v_f_items")
+                    f_word = st.text_input("キーワード検索", placeholder="例：ベタつく、最高", key="v_f_word")
+                with c2:
+                    f_skin = st.multiselect("肌悩み", sorted(voice_base_df["肌悩み"].dropna().unique()), key="v_f_skin")
+                    f_gender = st.multiselect("性別（追加絞り込み）", ["女性", "男性", "回答しない／その他"], key="v_f_gender")
+
+            f_df = voice_base_df.copy()
+            if f_items: f_df = f_df[f_df["商品名"].isin(f_items)]
+            if f_skin: f_df = f_df[f_df["肌悩み"].isin(f_skin)]
+            if f_gender: f_df = f_df[f_df["性別"].isin(f_gender)]
+            if f_word: f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
+
+            st.write(f"📈 該当件数: **{len(f_df)}** 件")
+            if not f_df.empty:
+                for _, row in f_df.iterrows():
+                    with st.container():
+                        st.caption(f"📍 {row['商品名']} | {row['性別']} | {row['年代']} | 悩み: {row['肌悩み']}")
+                        st.info(row[feedback_col])
+            else:
+                st.warning("条件に一致する声が見つかりませんでした。")
+
+        # --- Tab 3: その他（分類漏れ）確認 ---
+        with tab3:
+            st.subheader("🔍 その他項目の内訳確認")
+            other_col = "商品のアイテムタイプにて『その他』を選んだ方は入力してください。"
+            st.caption("ジャンルやタイプで『その他』を選んだ方の記述内容です。")
+            
+            # 「その他」の列に記入がある行を抽出
+            others_df = sub_df[sub_df[other_col].fillna("").str.strip() != ""]
+            
+            if not others_df.empty:
                 st.dataframe(
                     others_df[["商品名", "性別", "年代", other_col]],
                     use_container_width=True,
                     hide_index=True
                 )
-
-            # --- 2. 【感想・不満】タブ：多角的な絞り込み分析 ---
-            with sub_tab_voice:
-                st.markdown("#### 🗣️ 全ジャンル・全アイテムの生の声")
-                
-                # 感想があるデータだけをベースにする
-                voice_base_df = sub_df[sub_df[feedback_col].fillna("").str.strip() != ""]
-                
-                # --- タブ内でのさらに詳細な絞り込み ---
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    # 商品名でさらに絞る（マルチセレクト）
-                    f_items = st.multiselect("特定の商品で絞り込む", sorted(voice_base_df["商品名"].unique()))
-                with c2:
-                    # 肌悩みで絞る
-                    f_skin = st.multiselect("肌悩みで絞り込む", sorted(voice_base_df["肌悩み"].dropna().unique()))
-                with c3:
-                    # キーワード検索
-                    f_word = st.text_input("キーワード検索", placeholder="例：高い、リピート")
-
-                # フィルター適用
-                f_df = voice_base_df.copy()
-                if f_items:
-                    f_df = f_df[f_df["商品名"].isin(f_items)]
-                if f_skin:
-                    f_df = f_df[f_df["肌悩み"].isin(f_skin)]
-                if f_word:
-                    f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
-
-                # 結果表示
-                st.write(f"📊 該当件数: {len(f_df)} 件")
-                
-                # この表には「全ての情報」を載せて、分析しやすくする
-                st.dataframe(
-                    f_df[["商品名", "性別", "年代", "肌悩み", feedback_col]],
-                    use_container_width=True,
-                    hide_index=True
-                )
+            else:
+                st.info("現在、分類不能なデータ（その他）はありません。")
