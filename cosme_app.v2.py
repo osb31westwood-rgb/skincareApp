@@ -438,12 +438,24 @@ elif menu == "✨ AIポップ作成":
             if not item_stats.dropna().empty:
                 st.info(f"【{gender_target}】評価トップ: {item_stats.idxmax()}")
                 import plotly.graph_objects as go
+
+                # --- 修正ポイント：最後と最初をつなげる ---
+                # 値のリストの最後に、最初の値を付け加える
+                r_values = list(item_stats.values)
+                r_values.append(r_values[0])
+                
+                # 項目のリストの最後に、最初の項目名を付け加える
+                theta_values = list(conf["scores"])
+                theta_values.append(theta_values[0])
+
                 fig_spy = go.Figure(go.Scatterpolar(
-                    r=item_stats.values, 
-                    theta=conf["scores"], 
+                    r=r_values,           # 修正後のリストを使用
+                    theta=theta_values,   # 修正後のリストを使用
                     fill='toself', 
-                    line_color='pink'
+                    line_color=theme_colors[0] if 'theme_colors' in locals() else 'pink' # 先ほどの配色を反映
                 ))
+                # --- ここまで ---
+
                 fig_spy.update_layout(
                     height=250, 
                     margin=dict(l=30, r=30, t=20, b=20), 
