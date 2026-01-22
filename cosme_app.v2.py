@@ -822,14 +822,36 @@ elif menu == "📈 アンケート分析":
                     c1, c2 = st.columns(2)
                     with c1: x_ax = st.selectbox("横軸", valid_scores, index=0, key="dist_x")
                     with c2: y_ax = st.selectbox("縦軸", valid_scores, index=len(valid_scores)-1, key="dist_y")
+                    
                     plot_df = sub_df.copy()
                     plot_df[x_ax] = pd.to_numeric(plot_df[x_ax], errors='coerce')
                     plot_df[y_ax] = pd.to_numeric(plot_df[y_ax], errors='coerce')
                     plot_df = plot_df.dropna(subset=[x_ax, y_ax])
+                    
                     import plotly.express as px
-                    fig_scatter = px.scatter(plot_df, x=x_ax, y=y_ax, color="年代", hover_name=conf["item_col"], range_x=[0,5.5], range_y=[0,5.5], template="plotly_white")
-                    st.plotly_chart(fig_scatter, use_container_width=True)
-
+                    
+                    # --- 🚨 修正ポイント：列名の安全確認 ---
+                    # 実際の列名に合わせて自動調整
+                    color_col = None
+                    if "年代" in plot_df.columns:
+                        color_col = "年代"
+                    elif "年齢" in plot_df.columns:
+                        color_col = "年齢"
+                    
+                    try:
+                        fig_scatter = px.scatter(
+                            plot_df, 
+                            x=x_ax, 
+                            y=y_ax, 
+                            color=color_col, # 列が見つからない場合はNone（色分けなし）になる
+                            hover_name=conf["item_col"] if conf["item_col"] in plot_df.columns else None, 
+                            range_x=[0, 5.5], 
+                            range_y=[0, 5.5], 
+                            template="plotly_white"
+                        )
+                        st.plotly_chart(fig_scatter, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"散布図の表示に失敗しました。データ形式を確認してください。")
             # --- Tab 3: 生の声分析 ---
             with tab3:
                 st.subheader("🗣️ 生の声")
@@ -878,4 +900,3 @@ elif menu == "📈 アンケート分析":
                     st.dataframe(others_df[[conf["item_col"], "性別", "年代", other_col]], use_container_width=True, hide_index=True)
                 else: st.info("該当データなし")
 
-                
