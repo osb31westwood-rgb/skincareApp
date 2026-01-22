@@ -863,32 +863,55 @@ pass
 # --- Tab 2: 相関分析 (新しく追加する分布図のコード) ---
 with tab2:
     st.subheader("📉 スコアの相関・分布分析")
-    st.caption("2つの評価項目のバランスを、年代ごとにプロットします。")
     
     valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
     
-    col_ax1, col_ax2 = st.columns(2)
-    with col_ax1:
-        x_ax = st.selectbox("横軸（X軸）を選択", valid_scores, index=0, key="dist_x")
-    with col_ax2:
-        y_ax = st.selectbox("縦軸（Y軸）を選択", valid_scores, index=len(valid_scores)-1 if len(valid_scores)>1 else 0, key="dist_y")
-    
-    # 散布図の作成
-    fig_scatter = px.scatter(
-        sub_df, 
-        x=x_ax, 
-        y=y_ax, 
-        color="年代", # 年代で色分け
-        hover_name=conf["item_col"], 
-        range_x=[0, 5.5], 
-        range_y=[0, 5.5],
-        color_discrete_sequence=theme_colors,
-        template="plotly_white"
-    )
-    
-    fig_scatter.update_traces(marker=dict(size=12, opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    if not valid_scores:
+        st.error("スコアデータが見つかりません。")
+    else:
+        col_ax1, col_ax2 = st.columns(2)
+        with col_ax1:
+            x_ax = st.selectbox("横軸（X軸）を選択", valid_scores, index=0, key="dist_x")
+        with col_ax2:
+            y_ax = st.selectbox("縦軸（Y軸）を選択", valid_scores, index=len(valid_scores)-1 if len(valid_scores)>1 else 0, key="dist_y")
+        
+        # --- 🚨 修正ポイント：データの掃除 ---
+        # 1. 必要な列だけを抜き出し、欠損値がある行を一時的に除外する
+        # 2. X軸とY軸の値を強制的に数値(float)に変換する
+        plot_df = sub_df.copy()
+        
+        # 年代列があるか確認（なければ作成）
+        age_col = "年代" if "年代" in plot_df.columns else "不明"
+        if age_col == "不明":
+            plot_df[age_col] = "不明"
 
+        try:
+            # 数値に変換できないデータ（文字列など）を強制的にNaNにして、その後削除
+            plot_df[x_ax] = pd.to_numeric(plot_df[x_ax], errors='coerce')
+            plot_df[y_ax] = pd.to_numeric(plot_df[y_ax], errors='coerce')
+            plot_df = plot_df.dropna(subset=[x_ax, y_ax])
+
+            if plot_df.empty:
+                st.warning("有効な数値データがないため、グラフを表示できません。")
+            else:
+                import plotly.express as px
+                fig_scatter = px.scatter(
+                    plot_df, 
+                    x=x_ax, 
+                    y=y_ax, 
+                    color=age_col, 
+                    hover_name=conf["item_col"] if conf["item_col"] in plot_df.columns else None, 
+                    range_x=[0, 5.5], 
+                    range_y=[0, 5.5],
+                    color_discrete_sequence=theme_colors if 'theme_colors' in locals() else None,
+                    template="plotly_white"
+                )
+                
+                fig_scatter.update_traces(marker=dict(size=12, opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
+                st.plotly_chart(fig_scatter, use_container_width=True)
+                
+        except Exception as e:
+            st.error(f"グラフ作成中にエラーが発生しました: {e}")
 # --- Tab 3: 生の声分析 ---
 with tab3:
     # (以前作った感想・不満分析のコード)
