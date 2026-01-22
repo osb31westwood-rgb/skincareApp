@@ -69,7 +69,7 @@ def upload_to_drive(uploaded_file, file_name):
         # 直リンクURLを生成（この形式ならStreamlitで直接表示できます）
         return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
     except Exception as e:
-        st.error(f"ドライブへの保存に失敗しました: {e}")
+        st.error(f"ドライブ保存エラーの詳細: {e}") # ここを詳しく表示するように変更
         return None
 
 # 定数・カラーパレット
