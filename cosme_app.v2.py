@@ -187,7 +187,7 @@ df = load_data()
 
 # サイドバー基本設定
 with st.sidebar:
-    st.title("💄 AIコスメPOP作成")
+    st.title("💄 Sachika's Cosme")
     
     # アイコン付きメニューの設定
     menu = option_menu(
@@ -218,6 +218,7 @@ with st.sidebar.expander("⚙️ 表示設定・データ絞り込み", expanded
     # パレットを選択
     selected_theme = st.sidebar.selectbox("📊 グラフの配色テーマ", list(COLOR_PALETTES.keys()))
 theme_colors = COLOR_PALETTES[selected_theme]
+
 st.markdown("---")
 
 if df is not None:
@@ -275,7 +276,7 @@ if menu == "📲 アンケートQR生成":
                 key="download_qr"
             )
             # ------------------------ 
-elif menu == "AIポップ生成":
+elif menu == "✨ AIポップ作成":
         st.header("✨ AIポップ案制作")
 
         # 1. NGワード辞書の読み込みと編集機能（サイドバー）
