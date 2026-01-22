@@ -10,6 +10,41 @@ import gspread
 from google.oauth2.service_account import Credentials
 import datetime
 
+# --- パスワード認証機能 ---
+def check_password():
+    """パスワードが正しいかチェックする関数"""
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+
+    # すでに認証済みなら何もしない
+    if st.session_state["password_correct"]:
+        return True
+
+    # パスワード入力画面の表示
+    st.title("🔐 会員専用ツール")
+    st.write("このアプリを使用するには合言葉が必要です。")
+    
+    password_input = st.text_input("パスワードを入力してください", type="password")
+    
+    # 秘密の合言葉（好きな文字に変えてください）
+    SECRET_PASSWORD = st.secrets.get("APP_PASSWORD", "fs11710n") 
+
+    if st.button("ログイン"):
+        if password_input == SECRET_PASSWORD:
+            st.session_state["password_correct"] = True
+            st.rerun()
+        else:
+            st.error("パスワードが違います。")
+    
+    return False
+
+# パスワードチェックを実行
+if not check_password():
+    st.stop() # パスワードが通らなければ、ここから下のコードは実行されない
+
+# --- ここから下に、元のアプリのメインコードを書く ---
+st.success("ログイン成功！ツールを起動します。")
+
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 
@@ -140,7 +175,7 @@ def load_ng_words():
 df = load_data()
 
 # サイドバー基本設定
-st.sidebar.title("💄 Cosme Management")
+st.sidebar.title("💄 Sachika's Cosme")
 menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品カルテ編集","商品カルテ一覧"])
 selected_theme = st.sidebar.selectbox("📊 グラフの配色テーマ", list(COLOR_PALETTES.keys()))
 theme_colors = COLOR_PALETTES[selected_theme]
