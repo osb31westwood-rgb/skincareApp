@@ -9,6 +9,7 @@ import google.generativeai as genai
 import gspread
 from google.oauth2.service_account import Credentials
 import datetime
+import time
 
 # --- パスワード認証機能 ---
 def check_password():
@@ -38,13 +39,17 @@ def check_password():
     
     return False
 
-# パスワードチェックを実行
+# --- パスワードチェックを実行 ---
 if not check_password():
-    st.stop() # パスワードが通らなければ、ここから下のコードは実行されない
+    st.stop()
 
-# --- ここから下に、元のアプリのメインコードを書く ---
-st.success("ログイン成功！ツールを起動します。")
-
+# --- ログイン成功時の演出（ここを修正） ---
+if "login_celebrated" not in st.session_state:
+    placeholder = st.empty() # 消去可能なメッセージ箱を作成
+    placeholder.success("🔐 ログイン成功！ツールを起動します...")
+    time.sleep(1.5) # 1.5秒だけ表示
+    placeholder.empty() # メッセージを消す
+    st.session_state["login_celebrated"] = True # 二回目以降は出さない
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
 
