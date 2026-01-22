@@ -727,7 +727,7 @@ elif menu == "📚 商品カルテ一覧":
             st.error(f"表示エラー: {e}")
             
             
-elif menu == "📊 分析（チャート）":
+elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
     
     if sub_df.empty:
