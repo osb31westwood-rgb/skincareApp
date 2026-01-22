@@ -535,7 +535,7 @@ if df is not None:
                 memo_val = latest_row.get("メモ", "")
                 author_val = latest_row.get("作成者", "")
                 base_date = latest_row.get("日付", "")
-                current_img_url = latest_row.get("画像URL", "") # 既存の画像URLを取得
+                current_img_url = latest_row.get("画像URL", "")
 
             st.markdown("---")
             
@@ -554,69 +554,48 @@ if df is not None:
             if current_img_url:
                 st.image(current_img_url, caption="現在登録されている画像", width=200)
             
-            uploaded_file = st.file_uploader("スマホで撮影または画像を選択（新しく登録・上書きする場合）", type=["jpg", "jpeg", "png"])
+            uploaded_file = st.file_uploader("スマホで撮影または画像を選択", type=["jpg", "jpeg", "png"])
 
+            # --- 保存ボタン ---
             if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
-            if not edit_item_name:
-                st.error("商品名を入力してください。")
-            else:
-                with st.spinner("データを保存中..."):
-                    try:
-                        # 1. 日本時間の取得 (+9時間)
+                if not edit_item_name:
+                    st.error("商品名を入力してください。")
+                else:
+                    with st.spinner("データを保存中..."):
+                        # ここで保存処理を実行
                         now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
                         now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # 2. 初回登録日の設定
                         final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
                         
-                        # 3. 画像の処理 (ImgBB)
-                        new_image_url = current_img_url # 基本は今のURLを維持
+                        # 画像処理
+                        new_image_url = current_img_url
                         if uploaded_file:
                             res_url = upload_to_imgbb(uploaded_file)
                             if res_url:
                                 new_image_url = res_url
 
-                        # 4. 保存する行データの作成 (A～I列)
-                        new_row = [
-                            final_base_date,    # A: 新規
-                            now_str,            # B: 更新
-                            edit_author,        # C: 作成者
-                            edit_item_name,     # D: 商品名
-                            "",                 # E: AIコピー
-                            edit_official_info, # F: 公式情報
-                            "",                 # G: ポップ案
-                            edit_memo,          # H: メモ
-                            new_image_url       # I: 画像URL
-                        ]
+                        new_row = [final_base_date, now_str, edit_author, edit_item_name, "", edit_official_info, "", edit_memo, new_image_url]
 
-                        # 5. 上書き or 新規追加の判定
-                        # 最新の全データを取得
+                        # 上書き判定
                         all_records = sheet_karte.get_all_records()
                         df_all = pd.DataFrame(all_records)
                         
-                        # D列(商品名)が既に存在するかチェック
                         if not df_all.empty and edit_item_name in df_all["商品名"].values:
-                            # 存在する行番号を特定 (1行目がヘッダーなので +2)
                             row_index = df_all[df_all["商品名"] == edit_item_name].index[0] + 2
-                            
-                            # A列(新規)の日時は上書きせず元のままにする
-                            existing_base_date = df_all.loc[df_all["商品名"] == edit_item_name, "新規"].values[0]
+                            existing_base_date = df_all.loc[df_all["商品名"] == edit_item_name, "新規"].values[0] if "新規" in df_all.columns else final_base_date
                             new_row[0] = str(existing_base_date) 
-
-                            # 該当行(A~I)を上書き更新
                             sheet_karte.update(range_name=f"A{row_index}:I{row_index}", values=[new_row])
-                            st.success(f"「{edit_item_name}」の情報を更新しました！")
+                            st.success(f"「{edit_item_name}」を更新しました！")
                         else:
-                            # 存在しない場合は新規追加
                             sheet_karte.append_row(new_row)
                             st.success(f"「{edit_item_name}」を新規登録しました！")
 
                         st.balloons()
                         st.rerun()
 
-                    except Exception as e:
-                        st.error(f"エラー: {e}")
-
+        except Exception as e:
+            st.error(f"システムエラーが発生しました: {e}")
+            
     elif menu == "商品カルテ一覧":
         st.header("📋 登録済み商品カルテ一覧")
         try:
