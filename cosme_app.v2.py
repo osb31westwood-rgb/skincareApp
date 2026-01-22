@@ -239,7 +239,13 @@ if df is not None:
                         client = get_gspread_client()
                         sh = client.open("Cosme Data")
                         sheet_ng = sh.worksheet("NGワード辞書")
-                        sheet_ng.append_row([new_word, new_reason])
+            
+                       # 現在の日時を取得
+                        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+                       # [NGワード, 理由, 更新日時] の順で追加
+                        sheet_ng.append_row([new_word, new_reason, now])
+            
                         st.success(f"「{new_word}」を追加しました！")
                         st.cache_data.clear() 
                         st.rerun()
@@ -370,127 +376,96 @@ if df is not None:
                 else: st.warning("先に「商品カルテ編集」からこの商品を登録してください。")
     elif menu == "商品カルテ編集":
         st.header("📋 商品カルテ：編集・管理")
-
         try:
-            # 1. スプレッドシートからの読み込み
             client = get_gspread_client()
             sh = client.open("Cosme Data")
             sheet_karte = sh.worksheet("カルテ")
             records = sheet_karte.get_all_records()
             df_karte = pd.DataFrame(records) if records else pd.DataFrame()
 
-            # 2. モード選択：新規 or 既存
             mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
 
-            # 初期値の準備
-            target_item_name = ""
-            official_info_val = ""
-            memo_val = ""
+            # 初期値の設定
+            target_item_name, official_info_val, memo_val, author_val = "", "", "", ""
+            base_date = "" # 初回作成日保持用
 
-            if mode == "既存データから選んで編集":
-                if not df_karte.empty and "商品名" in df_karte.columns:
-                    item_list = [n for n in df_karte["商品名"].unique() if n]
-                    selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
-                    
-                    # 選択した商品の最新データを取得
-                    latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
-                    target_item_name = selected_name
-                    official_info_val = latest_row.get("公式情報", "")
-                    # 「メモ」という列がある前提（なければ空）
-                    memo_val = latest_row.get("メモ", "") 
-                else:
-                    st.warning("既存データがありません。「新規カルテ作成」を選んでください。")
-            
+            if mode == "既存データから選んで編集" and not df_karte.empty:
+                item_list = [n for n in df_karte["商品名"].unique() if n]
+                selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
+                latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
+                
+                target_item_name = selected_name
+                official_info_val = latest_row.get("公式情報", "")
+                memo_val = latest_row.get("メモ", "")
+                author_val = latest_row.get("作成者", "")
+                base_date = latest_row.get("日付", "") # 初回の日付を引き継ぐ
+
             st.markdown("---")
-            
-            # 3. 入力エリア（新規・既存共通）
-            st.subheader(f"🖋️ {mode}")
-            
-            edit_item_name = st.text_input("商品名", value=target_item_name)
+            col_a, col_b = st.columns(2)
+            with col_a:
+                edit_item_name = st.text_input("商品名", value=target_item_name)
+            with col_b:
+                edit_author = st.text_input("作成者・更新者名", value=author_val, placeholder="お名前を入力")
+
             edit_official_info = st.text_area("公式情報（特徴・成分など）", value=official_info_val, height=150)
-            edit_memo = st.text_area("スタッフメモ・備考（ターゲット層や接客のヒント）", value=memo_val, height=100)
+            edit_memo = st.text_area("スタッフメモ・備考", value=memo_val, height=100)
 
             if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
                 if not edit_item_name:
                     st.error("商品名を入力してください。")
                 else:
-                    import datetime
+                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # 新規なら今日の日付、既存なら元の日付を使用
+                    final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
+                    
+                    # 列順: 日付, 更新, 作成者, 商品名, AIコピー, 公式情報, ポップ案, メモ
                     new_row = [
-                        str(datetime.date.today()), # 日付
-                        "スタッフ",                 # 作成者（仮）
-                        edit_item_name,             # 商品名
-                        "",                         # AIコピー（ここでは空）
-                        edit_official_info,         # 公式情報
-                        "",                         # ポップ案（ここでは空）
-                        edit_memo                   # メモ（スプレッドシートに列を増やしてください）
+                        final_base_date, # 初回作成日
+                        now_str,         # 更新日時
+                        edit_author,     # 作成者
+                        edit_item_name,  # 商品名
+                        "",              # AIコピー
+                        edit_official_info, 
+                        "",              # ポップ案
+                        edit_memo
                     ]
                     sheet_karte.append_row(new_row)
                     st.success(f"「{edit_item_name}」の情報を保存しました！")
                     st.balloons()
-
-            # 4. 全体の一覧も下に見えるようにしておく
-            if not df_karte.empty:
-                with st.expander("📂 現在のカルテ一覧を表示"):
-                    st.dataframe(df_karte, use_container_width=True)
-
         except Exception as e:
-            st.error(f"エラーが発生しました: {e}")
-            
+            st.error(f"エラー: {e}")
+
     elif menu == "商品カルテ一覧":
         st.header("📋 登録済み商品カルテ一覧")
-
         try:
-            # 1. スプレッドシートからの読み込み
             client = get_gspread_client()
             sh = client.open("Cosme Data")
             sheet_karte = sh.worksheet("カルテ")
             records = sheet_karte.get_all_records()
 
-            if not records:
-                st.info("💡 まだカルテにデータが登録されていません。AIポップ生成から保存してください。")
-                st.stop()
+            if records:
+                df_karte = pd.DataFrame(records)
+                st.subheader("📊 全商品アーカイブ")
+                # --- メモ列を追加して表示 ---
+                cols = ["日付", "更新","作成者", "商品名", "AIコピー", "ポップ案", "メモ"]
+                display_cols = [c for c in cols if c in df_karte.columns]
+                st.dataframe(df_karte[display_cols], use_container_width=True)
 
-            import pandas as pd
-            df_karte = pd.DataFrame(records)
-
-            # 2. メインのカルテ一覧表示
-            st.subheader("📊 全商品アーカイブ")
-            # 必要な列を並び替え（スプレッドシートの項目名に合わせる）
-            cols = ["日付", "作成者", "商品名", "AIコピー", "ポップ案"]
-            display_cols = [c for c in cols if c in df_karte.columns]
-            st.dataframe(df_karte[display_cols], use_container_width=True)
-
-            # 3. 特定商品の「深掘り」表示機能（ここが大事！）
-            st.markdown("---")
-            st.subheader("🔍 商品別・詳細アーカイブ")
-            
-            # 商品名リストを取得
-            item_list = [n for n in df_karte["商品名"].unique() if n]
-            
-            if item_list:
-                target_item = st.selectbox("詳しく見たい商品を選択してください", item_list, key="karte_pro_select")
-                
-                # 選択された商品の最新データを取得
-                item_data = df_karte[df_karte["商品名"] == target_item].iloc[-1] # 一番下の（最新の）データ
-
-                # デザインされたカード形式で表示
-                c1, c2 = st.columns([1, 1])
-                with c1:
-                    st.markdown(f"### 🏷️ {target_item}")
-                    st.write(f"**最終更新:** {item_data.get('日付', '不明')}")
-                    st.write(f"**担当者:** {item_data.get('作成者', '不明')}")
-                    st.info(f"**公式・基本情報:**\n\n{item_data.get('公式情報', '未登録')}")
-                
-                with c2:
-                    st.success(f"**✨ AIが提案したコピー（原文）:**\n\n{item_data.get('AIコピー', '未登録')}")
-                    st.warning(f"**✍️ 最終決定したポップ案:**\n\n{item_data.get('ポップ案', '未作成')}")
+                st.markdown("---")
+                st.subheader("🔍 商品別・詳細アーカイブ")
+                item_list = [n for n in df_karte["商品名"].unique() if n]
+                if item_list:
+                    target_item = st.selectbox("詳しく見たい商品を選択", item_list, key="karte_pro_select")
+                    item_data = df_karte[df_karte["商品名"] == target_item].iloc[-1]
                     
-                    # 編集のアドバイスなどを出すことも可能
-                    st.caption("※この内容はスプレッドシートから直接修正することも可能です。")
-
-            else:
-                st.warning("有効な商品名が見つかりません。")
-
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown(f"### 🏷️ {target_item}")
+                        st.info(f"**公式情報:**\n\n{item_data.get('公式情報', '未登録')}")
+                        # --- 詳細欄にもメモを表示 ---
+                        st.warning(f"**📝 スタッフメモ・備考:**\n\n{item_data.get('メモ', 'なし')}")
+                    with c2:
+                        st.success(f"**AI提案コピー:**\n\n{item_data.get('AIコピー', '未登録')}")
+                        st.success(f"**決定ポップ案:**\n\n{item_data.get('ポップ案', '未作成')}")
         except Exception as e:
-            st.error(f"表示エラーが発生しました。")
-            st.code(f"Error: {e}")
+            st.error(f"表示エラー: {e}")
