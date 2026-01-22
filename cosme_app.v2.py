@@ -45,31 +45,51 @@ from googleapiclient.discovery import build
 def upload_to_drive(uploaded_file, file_name):
     """Googleドライブに画像をアップロードして直リンクを返す"""
     try:
-        # get_gspread_clientの認証情報を流用してドライブサービスを作成
-        client = get_gspread_client()
-        drive_service = build('drive', 'v3', credentials=client.auth)
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+        from google.oauth2.service_account import Credentials
+        import io
+
+        # 1. 認証情報をsecretsから直接作成（これが一番確実です）
+        s_acc = st.secrets["gcp_service_account"]
+        creds = Credentials.from_service_account_info(
+            s_acc,
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
         
-        # ★★★ 保存用フォルダのIDをここに入れてください ★★★
+        # 2. ドライブサービスを構築
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # ★★★ ここにあなたのフォルダIDを貼り付けてください ★★★
         folder_id = "10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu?usp=sharing" 
         
+        # 3. メタデータとファイル内容の準備
         file_metadata = {
             'name': file_name,
             'parents': [folder_id]
         }
         
-        # ファイルの内容をメモリ上に読み込む
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), 
-                                  mimetype=uploaded_file.type, 
-                                  resumable=True)
+        media = MediaIoBaseUpload(
+            io.BytesIO(uploaded_file.getvalue()), 
+            mimetype=uploaded_file.type, 
+            resumable=True
+        )
         
-        # ドライブにアップロード実行
-        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        # 4. アップロード実行
+        file = drive_service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id'
+        ).execute()
+        
         file_id = file.get('id')
         
-        # 直リンクURLを生成（この形式ならStreamlitで直接表示できます）
-        return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
+        # 5. 表示用URLを返す（Googleドライブの直リンク形式）
+        # このURL形式ならStreamlitのst.imageで表示可能です
+        return f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000"
+        
     except Exception as e:
-        st.error(f"ドライブ保存エラーの詳細: {e}") # ここを詳しく表示するように変更
+        st.error(f"ドライブ保存エラーの詳細: {e}")
         return None
 
 # 定数・カラーパレット
