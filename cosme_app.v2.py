@@ -67,15 +67,26 @@ def upload_to_drive(uploaded_file, file_name):
         # 3. メタデータの準備
         file_metadata = {
             'name': file_name,
-            'parents': ["10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu"]  # ここで「あなたのフォルダ」を指定
+            'parents': ["10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu"]  # IDを必ず " " で囲む
         }
         
-        # 4. アップロード実行（supportsAllDrives=True を追加）
+        # --- ★重要：ここが抜けていたか、名前が違っていた部分です ---
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+        
+        media = MediaIoBaseUpload(
+            io.BytesIO(uploaded_file.getvalue()), 
+            mimetype=uploaded_file.type, 
+            resumable=True
+        )
+        # --------------------------------------------------------
+
+        # 4. アップロード実行
         file = drive_service.files().create(
             body=file_metadata, 
-            media_body=media, 
+            media_body=media,  # ここで上の media を使います
             fields='id',
-            supportsAllDrives=True  # ★これが必要な場合があります
+            supportsAllDrives=True 
         ).execute()
         
         file_id = file.get('id')
