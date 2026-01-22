@@ -193,7 +193,7 @@ theme_colors = COLOR_PALETTES[selected_theme]
 if df is not None:
     # --- 共通フィルタリング ---
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🔍 データを絞り込む")
+    st.sidebar.subheader("🔍 📊データを絞り込む")
     
     genre = st.sidebar.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
     conf = COLUMN_CONFIG[genre]
@@ -207,12 +207,17 @@ if df is not None:
     ages = sorted(sub_df[COL_AGE].unique())
     selected_ages = st.sidebar.multiselect("年代を選択", ages, default=ages)
     
+    # ✨【新規】性別絞り込みを追加
+    genders = ["女性", "男性", "回答しない／その他"]
+    selected_genders = st.sidebar.multiselect("性別を選択", genders, default=genders)
 
-    # フィルタ適用
+    # フィルタ適用（selected_genders を条件に加える）
     sub_df = sub_df[
         (sub_df[COL_AGE].isin(selected_ages)) & 
-        (sub_df[conf["type_col"]].isin(selected_types))
+        (sub_df[conf["type_col"]].isin(selected_types)) &
+        (sub_df["性別"].isin(selected_genders)) # ←ここを追加！
     ]
+    
     # --- 各メニュー機能 ---
     if menu == "QR生成":
         st.header("📲 アンケート回答用QR作成")
@@ -492,17 +497,51 @@ if df is not None:
             run_generate = st.button("🚀 AIポップコピーを生成", key="btn_generate_ai_pop")
         with col2:
             st.subheader("📊 顧客の声（分析結果）")
-            item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
-            if not item_stats.dropna().empty:
-                st.info(f"評価トップ: {item_stats.idxmax()}")
-                import plotly.graph_objects as go
-                fig_spy = go.Figure(go.Scatterpolar(r=item_stats.values, theta=conf["scores"], fill='toself', line_color='pink'))
-                fig_spy.update_layout(height=250, margin=dict(l=30, r=30, t=20, b=20), polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
-                st.plotly_chart(fig_spy, use_container_width=True)
-                analysis_hint = f"顧客分析: {item_stats.idxmax()}が特に評価されています。"
+            
+            # --- 1. 性別フィルターの設置 ---
+            gender_target = st.radio(
+                "ターゲット層を選択",
+                ["全て", "女性", "男性", "回答しない／その他"],
+                horizontal=True,
+                key="gender_filter_radio"
+            )
+
+            # --- 2. データの絞り込みロジック ---
+            # 選択した商品で絞り込み
+            item_all_data = sub_df[sub_df[conf["item_col"]] == selected_item]
+            
+            # 性別でさらに絞り込み
+            if gender_target != "全て":
+                # アンケートデータの列名が「性別」であることを前提としています
+                target_df = item_all_data[item_all_data["性別"] == gender_target]
             else:
-                st.warning("アンケートデータがありません")
-                analysis_hint = "新商品として魅力を提案してください。"
+                target_df = item_all_data
+
+            # スコアの平均を計算
+            item_stats = target_df[conf["scores"]].mean()
+
+            # --- 3. グラフとヒントの表示 ---
+            if not item_stats.dropna().empty:
+                st.info(f"【{gender_target}】評価トップ: {item_stats.idxmax()}")
+                import plotly.graph_objects as go
+                fig_spy = go.Figure(go.Scatterpolar(
+                    r=item_stats.values, 
+                    theta=conf["scores"], 
+                    fill='toself', 
+                    line_color='pink'
+                ))
+                fig_spy.update_layout(
+                    height=250, 
+                    margin=dict(l=30, r=30, t=20, b=20), 
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 5]))
+                )
+                st.plotly_chart(fig_spy, use_container_width=True)
+                
+                # AIへのヒントに性別情報を追加
+                analysis_hint = f"顧客分析（{gender_target}）: {item_stats.idxmax()}が特に評価されています。"
+            else:
+                st.warning(f"⚠️ {gender_target}の回答データがありません")
+                analysis_hint = f"{gender_target}向けに、商品の魅力を新規提案してください。"
 
         # 4. 生成処理と薬機法チェック
         if run_generate:
@@ -539,6 +578,7 @@ if df is not None:
                         カテゴリー: {item_genre} （{item_type}） # ←ここを追加！
                         特徴: {input_info}
                         要望: {human_hint}
+                        ターゲット層: {gender_target}
                         分析結果: {analysis_hint}
                         
                         【出力ルール】:
