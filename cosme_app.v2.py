@@ -64,22 +64,18 @@ def upload_to_drive(uploaded_file, file_name):
         folder_id = "10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu" 
         
         # 3. メタデータとファイル内容の準備
+        # 3. メタデータの準備
         file_metadata = {
             'name': file_name,
-            'parents': [folder_id]
+            'parents': ["10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu"]  # ここで「あなたのフォルダ」を指定
         }
         
-        media = MediaIoBaseUpload(
-            io.BytesIO(uploaded_file.getvalue()), 
-            mimetype=uploaded_file.type, 
-            resumable=True
-        )
-        
-        # 4. アップロード実行
+        # 4. アップロード実行（supportsAllDrives=True を追加）
         file = drive_service.files().create(
             body=file_metadata, 
             media_body=media, 
-            fields='id'
+            fields='id',
+            supportsAllDrives=True  # ★これが必要な場合があります
         ).execute()
         
         file_id = file.get('id')
