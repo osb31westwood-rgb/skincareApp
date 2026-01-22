@@ -42,56 +42,34 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 from googleapiclient.discovery import build
 
-def upload_to_drive(uploaded_file, file_name):
-    """Googleドライブに画像をアップロードして直リンクを返す"""
-    try:
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaIoBaseUpload
-        from google.oauth2.service_account import Credentials
-        import io
+import requests
+import base64
 
-        # 1. 認証情報をsecretsから直接作成（これが一番確実です）
-        s_acc = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(
-            s_acc,
-            scopes=["https://www.googleapis.com/auth/drive"]
-        )
+def upload_to_imgbb(uploaded_file):
+    """ImgBBに画像をアップロードして直リンクを返す"""
+    try:
+        api_key = st.secrets["IMGBB_API_KEY"]
+        url = "https://api.imgbb.com/1/upload"
         
-        # 2. ドライブサービスを構築
-        drive_service = build('drive', 'v3', credentials=creds)
+        # 画像をbase64形式に変換
+        image_data = base64.b64encode(uploaded_file.getvalue())
         
-        # ★★★ ここにあなたのフォルダIDを貼り付けてください ★★★
-        folder_id = "10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu" 
-        
-        # 3. メタデータとファイル内容の準備
-        # 3. メタデータの準備
-        file_metadata = {
-            'name': file_name,
-            'parents': ["10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu"]
+        data = {
+            "key": api_key,
+            "image": image_data,
         }
         
-        # mediaの定義（resumableをFalseにしてみます）
-        media = MediaIoBaseUpload(
-            io.BytesIO(uploaded_file.getvalue()), 
-            mimetype=uploaded_file.type, 
-            resumable=False
-        )
-
-        # 4. アップロード実行（シンプルに）
-        file = drive_service.files().create(
-            body=file_metadata, 
-            media_body=media, 
-            fields='id'
-        ).execute()
+        # アップロード実行
+        response = requests.post(url, data=data)
         
-        file_id = file.get('id')
-        
-        # 5. 表示用URLを返す（Googleドライブの直リンク形式）
-        # このURL形式ならStreamlitのst.imageで表示可能です
-        return f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000"
-        
+        if response.status_code == 200:
+            # 成功したら画像のURLを返す
+            return response.json()["data"]["url"]
+        else:
+            st.error(f"ImgBBアップロード失敗: {response.text}")
+            return None
     except Exception as e:
-        st.error(f"ドライブ保存エラーの詳細: {e}")
+        st.error(f"エラーが発生しました: {e}")
         return None
 
 # 定数・カラーパレット
@@ -572,13 +550,12 @@ if df is not None:
                         
                         # 1. 画像の処理
                         new_image_url = current_img_url # 基本は今のURLを維持
+                        # --- 修正箇所 ---
                         if uploaded_file:
-                            # 新しいファイルがアップロードされたらドライブへ保存
-                            file_name = f"{edit_item_name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.png"
-                            res_url = upload_to_drive(uploaded_file, file_name)
+                            # ここを upload_to_drive から upload_to_imgbb に変更
+                            res_url = upload_to_imgbb(uploaded_file)
                             if res_url:
                                 new_image_url = res_url
-
                         # 2. スプレッドシートへの書き込み
                         # 列順: 日付, 更新, 作成者, 商品名, AIコピー, 公式情報, ポップ案, メモ, 画像URL
                         new_row = [
