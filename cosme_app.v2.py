@@ -789,35 +789,77 @@ elif menu == "📈 アンケート分析":
                     st.plotly_chart(fig_dist, use_container_width=True)
 
             # --- 3. 分析のヒント表示 ---
+            # --- 3. 分析のヒント表示 ---
             if not item_stats.dropna().empty:
-                top_score = item_stats.idxmax()
-                st.success(f"💡 分析ヒント: この商品は **{top_score}** が最も評価されています。分布図で点がバラけている場合は、人によって好みが分かれるポイントです。")
-        with tab2:
-            st.subheader("お客様からの具体的な感想・不満点")
+                # 最大値を調べる
+                max_val = item_stats.max()
+                # 最大値と同じ値を持つ項目をすべて抽出
+                top_scores = item_stats[item_stats == max_val].index.tolist()
+                
+                # 項目名を「・」でつなげる（例：保湿・香り・コスパ）
+                top_scores_str = " ・ ".join(top_scores)
+                
+                st.success(f"💡 分析ヒント: この商品は **{top_scores_str}** が最も評価されています（評価スコア: {max_val:.1f}）。")
+                
+                if len(top_scores) > 1:
+                    st.caption("✨ 複数の強みがある多機能な商品です！POPではこれらを組み合わせた訴求がおすすめ。")
+        
+       with tab2:
+            # 内部タブを「その他確認」と「感想・不満の全件分析」に分ける
+            sub_tab_etc, sub_tab_voice = st.tabs(["🔍 その他項目の内訳確認", "🗣️ 全データの感想・不満分析"])
             
-            # アイテムタイプが「その他」の人だけの声を抽出するボタン
+            # 列名の定義
             other_col = "商品のアイテムタイプにて『その他』を選んだ方は入力してください。"
             feedback_col = "ご感想やご不満点がございましたら、ご自由にご入力ください。"
-            
-            filter_other = st.checkbox("『その他』タイプの回答のみ表示")
-            
-            if filter_other:
-                # 「その他」の列が空でない、または「その他」と書かれているデータを抽出
-                display_df = sub_df[sub_df[conf["type_col"]] == "その他"]
-            else:
-                display_df = sub_df
 
-            # 表示する列を整理（列が存在するか確認しながら）
-            cols_to_show = ["商品名", "性別", "年代", "肌悩み", other_col, feedback_col]
-            # 実際にデータフレームにある列だけをピックアップ
-            actual_cols = [c for c in cols_to_show if c in display_df.columns]
-
-            if not display_df.empty:
-                st.write(f"該当件数: {len(display_df)}件")
+            # --- 1. 【その他】タブ：分類漏れの確認専用 ---
+            with sub_tab_etc:
+                st.markdown("#### 🔍 分類不能データの正体を確認")
+                st.caption("ジャンルやタイプで『その他』を選んだ人の記述です。新ジャンルの検討などに使います。")
+                
+                # 「その他」の記述がある行だけを表示
+                others_df = sub_df[sub_df[other_col].fillna("").str.strip() != ""]
+                
                 st.dataframe(
-                    display_df[actual_cols],
+                    others_df[["商品名", "性別", "年代", other_col]],
                     use_container_width=True,
                     hide_index=True
                 )
-            else:
-                st.info("該当する自由記述データはありませんでした。")
+
+            # --- 2. 【感想・不満】タブ：多角的な絞り込み分析 ---
+            with sub_tab_voice:
+                st.markdown("#### 🗣️ 全ジャンル・全アイテムの生の声")
+                
+                # 感想があるデータだけをベースにする
+                voice_base_df = sub_df[sub_df[feedback_col].fillna("").str.strip() != ""]
+                
+                # --- タブ内でのさらに詳細な絞り込み ---
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    # 商品名でさらに絞る（マルチセレクト）
+                    f_items = st.multiselect("特定の商品で絞り込む", sorted(voice_base_df["商品名"].unique()))
+                with c2:
+                    # 肌悩みで絞る
+                    f_skin = st.multiselect("肌悩みで絞り込む", sorted(voice_base_df["肌悩み"].dropna().unique()))
+                with c3:
+                    # キーワード検索
+                    f_word = st.text_input("キーワード検索", placeholder="例：高い、リピート")
+
+                # フィルター適用
+                f_df = voice_base_df.copy()
+                if f_items:
+                    f_df = f_df[f_df["商品名"].isin(f_items)]
+                if f_skin:
+                    f_df = f_df[f_df["肌悩み"].isin(f_skin)]
+                if f_word:
+                    f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
+
+                # 結果表示
+                st.write(f"📊 該当件数: {len(f_df)} 件")
+                
+                # この表には「全ての情報」を載せて、分析しやすくする
+                st.dataframe(
+                    f_df[["商品名", "性別", "年代", "肌悩み", feedback_col]],
+                    use_container_width=True,
+                    hide_index=True
+                )
