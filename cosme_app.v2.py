@@ -248,7 +248,12 @@ if df is not None:
             (sub_df[conf["type_col"]].isin(selected_types)) &
             (sub_df["性別"].isin(selected_genders))
         ]
-        sub_df = sub_df[ (sub_df[COL_AGE].isin(selected_ages)) & ... ]
+        # 条件を一つずつ & (かつ) でつなげます
+sub_df = sub_df[
+    (sub_df[COL_AGE].isin(selected_ages)) & 
+    (sub_df[conf["type_col"]].isin(selected_types)) &
+    (sub_df["性別"].isin(selected_genders))
+]
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
