@@ -84,9 +84,11 @@ def upload_to_drive(uploaded_file, file_name):
         # 4. アップロード実行
         file = drive_service.files().create(
             body=file_metadata, 
-            media_body=media,  # ここで上の media を使います
+            media_body=media, 
             fields='id',
-            supportsAllDrives=True 
+            supportsAllDrives=True,
+            # ★追加：管理者の権限で、親フォルダ（あなたの容量）への書き込みを強制する
+            useDomainAdminAccess=False 
         ).execute()
         
         file_id = file.get('id')
