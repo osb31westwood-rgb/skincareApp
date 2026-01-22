@@ -8,7 +8,7 @@ import urllib.parse
 import google.generativeai as genai
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime as dt
 
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="CosmeInsight Pro v5", layout="wide")
@@ -299,7 +299,7 @@ if df is not None:
                         
                         if row_idx:
                             headers = sheet_k.row_values(1)
-                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            now_str = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
                             
                             # メモ欄の更新
                             if "メモ" in headers:
@@ -545,7 +545,7 @@ if df is not None:
                     st.error("商品名を入力してください。")
                 else:
                     with st.spinner("データを保存中..."):
-                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        now_str = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
                         
                         # 1. 画像の処理
