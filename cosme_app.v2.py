@@ -215,18 +215,11 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # --- サイドバー内の表示 ---
-    with st.sidebar.expander("⚙️ 表示設定・データ絞り込み", expanded=False):
-      # パレットを選択
-     selected_theme = st.sidebar.selectbox("📊 グラフの配色テーマ", list(COLOR_PALETTES.keys()))
-    theme_colors = COLOR_PALETTES[selected_theme]
-
-    st.markdown("---")
 
     if df is not None:
     # --- 共通の絞り込みフィルター ---
         with st.expander("⚙️ データ絞り込み", expanded=True): # 最初は見せるためにTrueにしてみましょう
-           selected_theme = st.selectbox("📊 配色", list(COLOR_PALETTES.keys()))
+           selected_theme = st.selectbox("📊 分析グラフのカラー", list(COLOR_PALETTES.keys()))
            theme_colors = COLOR_PALETTES[selected_theme]
         
            genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
