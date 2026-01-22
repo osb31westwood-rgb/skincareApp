@@ -169,51 +169,123 @@ if df is not None:
     elif menu == "レーダーチャート比較":
         st.header(f"📊 スパイダー分析 ({selected_theme})")
         
-        # --- 【新機能】グリッド切り替えスイッチ ---
+        # --- 設定エリア ---
         col_chart1, col_chart2 = st.columns([2, 1])
         with col_chart2:
             st.write("🔧 チャート設定")
             show_grid = st.toggle("グリッド線を表示", value=True)
             show_axis = st.toggle("軸ラベルを表示", value=True)
+            # ★追加：表示モードの切り替え
+            display_mode = st.radio("表示形式", ["重ねて比較", "横に並べる"], horizontal=True)
 
         items = sorted(sub_df[conf["item_col"]].dropna().unique())
         selected_items = st.multiselect("比較する商品を選択", items)
         
         if selected_items:
-            fig = go.Figure()
             valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
             
-            for i, item in enumerate(selected_items):
-                item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
-                color = theme_colors[i % len(theme_colors)]
-                fig.add_trace(go.Scatterpolar(
-                    r=item_data.values, 
-                    theta=valid_scores, 
-                    fill='toself', 
-                    name=item, 
-                    line=dict(color=color), 
-                    fillcolor=color, 
-                    opacity=0.5
-                ))
-            
-            # --- スイッチの状態を反映 ---
-            fig.update_layout(
-                polar=dict(
-                    radialaxis=dict(
-                        visible=show_grid, # グリッド（円）の表示
-                        range=[0, 5],
-                        showticklabels=show_axis # 数字ラベルの表示
+            if display_mode == "重ねて比較":
+                fig = go.Figure()
+                for i, item in enumerate(selected_items):
+                    item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
+                    # 閉じたチャートにするためにデータの終点を始点と繋ぐ
+                    r_values = item_data.values.tolist()
+                    r_values += r_values[:1]
+                    theta_values = valid_scores + [valid_scores[0]]
+                    
+                    color = theme_colors[i % len(theme_colors)]
+                    fig.add_trace(go.Scatterpolar(
+                        r=r_values, 
+                        theta=theta_values, 
+                        fill='toself', 
+                        name=item, 
+                        line=dict(color=color), 
+                        fillcolor=color, 
+                        opacity=0.5
+                    ))
+                
+                fig.update_layout(
+                    polar=dict(
+                        radialaxis=dict(visible=show_grid, range=[0, 5], showticklabels=show_axis),
+                        angularaxis=dict(visible=show_grid, showticklabels=show_axis)
                     ),
-                    angularaxis=dict(
-                        visible=show_grid, # スポーク（放射状の線）の表示
-                        showticklabels=show_axis # 項目名の表示
-                    )
-                ),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=True
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=True
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            else: # 横に並べる
+                cols = st.columns(len(selected_items))
+                for i, item in enumerate(selected_items):
+                    with cols[i]:
+                        item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
+                        r_values = item_data.values.tolist()
+                        r_values += r_values[:1]
+                        theta_values = valid_scores + [valid_scores[0]]
+                        
+                        fig_sub = go.Figure(go.Scatterpolar(
+                            r=r_values, theta=theta_values, fill='toself', 
+                            name=item, line=dict(color=theme_colors[i % len(theme_colors)])
+                        ))
+                        fig_sub.update_layout(
+                            polar=dict(
+                                radialaxis=dict(visible=show_grid, range=[0, 5], showticklabels=False),
+                                angularaxis=dict(visible=show_grid, showticklabels=show_axis)
+                            ),
+                            title=item, showlegend=False, height=300
+                        )
+                        st.plotly_chart(fig_sub, use_container_width=True)
+
+            # --- 【新機能】分析結果をカルテへ送る ---
+            st.markdown("---")
+            st.subheader("📝 分析結果をカルテに記録")
+            col_save1, col_save2 = st.columns([2, 1])
+            
+            with col_save1:
+                target_save_item = st.selectbox("記録する商品を選択", selected_items, key="save_analysis_item")
+                # その商品の最高評価項目を特定
+                target_stats = sub_df[sub_df[conf["item_col"]] == target_save_item][valid_scores].mean()
+                best_feature = target_stats.idxmax()
+            
+            with col_save2:
+                st.write(" ") # 余白
+                if st.button("💾 分析結果をメモに追記"):
+                    try:
+                        client = get_gspread_client()
+                        sh = client.open("Cosme Data")
+                        sheet_k = sh.worksheet("カルテ")
+                        records = sheet_k.get_all_records()
+                        
+                        # 行の特定
+                        row_idx = None
+                        for i, r in enumerate(records):
+                            if str(r.get("商品名")) == target_save_item:
+                                row_idx = i + 2
+                                break
+                        
+                        if row_idx:
+                            headers = sheet_k.row_values(1)
+                            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            
+                            # メモ欄の更新
+                            if "メモ" in headers:
+                                col_memo = headers.index("メモ") + 1
+                                current_memo = sheet_k.cell(row_idx, col_memo).value or ""
+                                analysis_msg = f"【自動追記】分析の結果、{best_feature}が最も高い評価でした。({now_str})"
+                                new_memo = f"{current_memo}\n{analysis_msg}".strip()
+                                
+                                # 更新日時も更新
+                                if "更新" in headers:
+                                    sheet_k.update_cell(row_idx, headers.index("更新") + 1, now_str)
+                                
+                                sheet_k.update_cell(row_idx, col_memo, new_memo)
+                                st.success(f"「{target_save_item}」のメモに分析結果を追記しました！")
+                                st.balloons()
+                            else:
+                                st.error("「メモ」列が見つかりません。")
+                        else:
+                            st.warning("この商品はまだカルテに登録されていません。")
+                    except Exception as e:
+                        st.error(f"保存失敗: {e}")
 
     elif menu == "分布図分析":
         st.header(f"📈 分析分布 ({selected_theme})")
@@ -405,7 +477,7 @@ if df is not None:
             with col_a:
                 edit_item_name = st.text_input("商品名", value=target_item_name)
             with col_b:
-                edit_author = st.text_input("作成者・更新者名", value=author_val, placeholder="お名前を入力")
+                edit_author = st.text_input("作成者・更新者名", value=author_val, placeholder="名前を入力")
 
             edit_official_info = st.text_area("公式情報（特徴・成分など）", value=official_info_val, height=150)
             edit_memo = st.text_area("スタッフメモ・備考", value=memo_val, height=100)
