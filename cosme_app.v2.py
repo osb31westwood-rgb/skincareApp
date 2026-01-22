@@ -61,7 +61,7 @@ def upload_to_drive(uploaded_file, file_name):
         drive_service = build('drive', 'v3', credentials=creds)
         
         # ★★★ ここにあなたのフォルダIDを貼り付けてください ★★★
-        folder_id = "10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu?usp=sharing" 
+        folder_id = "10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu" 
         
         # 3. メタデータとファイル内容の準備
         file_metadata = {
