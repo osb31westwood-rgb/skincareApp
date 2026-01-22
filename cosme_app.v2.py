@@ -201,7 +201,7 @@ if df is not None:
     
     # 【復活】種類別絞り込み
     types = sorted(sub_df[conf["type_col"]].dropna().unique())
-    selected_types = st.sidebar.multiselect("種類を選択", types, default=types)
+    selected_types = st.sidebar.multiselect("アイテムタイプを選択", types, default=types)
     
     # 【復活】年代絞り込み
     ages = sorted(sub_df[COL_AGE].unique())
@@ -217,7 +217,7 @@ if df is not None:
     if menu == "QR生成":
         st.header("📲 アンケート回答用QR作成")
         q_genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="qr_g")
-        q_type = st.selectbox("種類を選択", COLUMN_CONFIG[q_genre]["types"], key="qr_t")
+        q_type = st.selectbox("アイテムタイプを選択", COLUMN_CONFIG[q_genre]["types"], key="qr_t")
         q_item = st.text_input("商品名を入力", key="qr_i")
         
         if st.button("QRコードを発行"):
