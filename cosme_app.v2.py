@@ -348,13 +348,22 @@ elif menu == "✨ AIポップ作成":
 
         selected_item = st.selectbox("制作する商品を選択", all_items, key="ai_pop_selectbox")
         
+        ## 1. まず変数の中身をリセット
         saved_info = ""
         current_row_idx = None
+
+        # 2. saved_records（スプレッドシートの中身）を1行ずつチェック
         for i, row in enumerate(saved_records):
+            # 商品名が一致するかチェック
             if str(row.get('商品名')) == str(selected_item):
                 saved_info = row.get('公式情報', '')
-                current_row_idx = i + 2
-                break
+                current_row_idx = i + 2  # 行番号を保存
+                break  # 見つかったらループ終了
+
+        # 3. もし見つからなかった、あるいは公式情報が空だった場合の処理
+        if not saved_info:
+            saved_info = "（カルテに公式情報が登録されていません）"
+
 
         # 3. メインレイアウト（2カラム）
         st.markdown("---")
@@ -392,7 +401,12 @@ elif menu == "✨ AIポップ作成":
                     st.caption("🔍 商品データが見つかりません")
             # --- ここまで差し替え ---
 
-            input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150, key="input_info_area")
+            input_info = st.text_area(
+                "カルテからの引継ぎ情報", 
+                value=saved_info, 
+                height=150, 
+                key=f"input_info_{selected_item}" # キーに商品名を含めることで、商品を変えた時に中身を強制更新する
+            )
             human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に", key="input_hint")
             run_generate = st.button("🚀 AIポップコピーを生成", key="btn_generate_ai_pop")
         with col2:
