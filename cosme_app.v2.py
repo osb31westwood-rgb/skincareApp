@@ -203,6 +203,8 @@ with st.sidebar:
         icons=["qr-code-scan", "magic", "pencil-square", "collection", "bar-chart-line", "graph-up"],
         menu_icon="cast",
         default_index=0,
+    
+
         styles={
             "container": {"padding": "0!important", "background-color": "#fafafa"},
             "icon": {"color": "#90C6C8", "font-size": "18px"}, 
@@ -213,47 +215,43 @@ with st.sidebar:
 
     st.markdown("---")
 
-# --- サイドバー内の表示 ---
-with st.sidebar.expander("⚙️ 表示設定・データ絞り込み", expanded=False):
-    # パレットを選択
-    selected_theme = st.sidebar.selectbox("📊 グラフの配色テーマ", list(COLOR_PALETTES.keys()))
-theme_colors = COLOR_PALETTES[selected_theme]
+    # --- サイドバー内の表示 ---
+    with st.sidebar.expander("⚙️ 表示設定・データ絞り込み", expanded=False):
+      # パレットを選択
+     selected_theme = st.sidebar.selectbox("📊 グラフの配色テーマ", list(COLOR_PALETTES.keys()))
+    theme_colors = COLOR_PALETTES[selected_theme]
 
-st.markdown("---")
+    st.markdown("---")
 
-if df is not None:
+    if df is not None:
     # --- 共通の絞り込みフィルター ---
-    with st.expander("⚙️ データ絞り込み", expanded=True): # 最初は見せるためにTrueにしてみましょう
-        selected_theme = st.selectbox("📊 配色", list(COLOR_PALETTES.keys()))
-        theme_colors = COLOR_PALETTES[selected_theme]
+        with st.expander("⚙️ データ絞り込み", expanded=True): # 最初は見せるためにTrueにしてみましょう
+           selected_theme = st.selectbox("📊 配色", list(COLOR_PALETTES.keys()))
+           theme_colors = COLOR_PALETTES[selected_theme]
         
-        genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
-        conf = COLUMN_CONFIG[genre]
+           genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
+           conf = COLUMN_CONFIG[genre]
         
-        # フィルター適用のロジックをここに全部書く
-        sub_df = df[df[COL_GENRE] == genre].copy()
+            # フィルター適用のロジックをここに全部書く
+           sub_df = df[df[COL_GENRE] == genre].copy()
         
-        types = sorted(sub_df[conf["type_col"]].dropna().unique())
-        selected_types = st.multiselect("アイテムタイプ", types, default=types)
+           types = sorted(sub_df[conf["type_col"]].dropna().unique())
+           selected_types = st.multiselect("アイテムタイプ", types, default=types)
         
-        ages = sorted(sub_df[COL_AGE].unique())
-        selected_ages = st.multiselect("年代", ages, default=ages)
+           ages = sorted(sub_df[COL_AGE].unique())
+           selected_ages = st.multiselect("年代", ages, default=ages)
         
-        genders = ["女性", "男性", "回答しない／その他"]
-        selected_genders = st.multiselect("性別", genders, default=genders)
+           genders = ["女性", "男性", "回答しない／その他"]
+           selected_genders = st.multiselect("性別", genders, default=genders)
 
-        # フィルタ適用
-        sub_df = sub_df[
+           # フィルタ適用
+           sub_df = sub_df[
             (sub_df[COL_AGE].isin(selected_ages)) & 
             (sub_df[conf["type_col"]].isin(selected_types)) &
             (sub_df["性別"].isin(selected_genders))
-        ]
-        # 条件を一つずつ & (かつ) でつなげます
-sub_df = sub_df[
-    (sub_df[COL_AGE].isin(selected_ages)) & 
-    (sub_df[conf["type_col"]].isin(selected_types)) &
-    (sub_df["性別"].isin(selected_genders))
-]
+           ]
+           # 条件を一つずつ & (かつ) でつなげます
+
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
