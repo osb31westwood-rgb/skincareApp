@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#90C6C8" # ここを好きな色のコード（ピンク系など）に変える
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#fafafa"
+textColor = "#31333f"
+font = "sans serif"
