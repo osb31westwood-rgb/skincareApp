@@ -142,7 +142,7 @@ df = load_data()
 # サイドバー基本設定
 st.sidebar.title("💄 Cosme Management")
 menu = st.sidebar.radio("機能を選択", ["QR生成", "レーダーチャート比較", "分布図分析", "AIポップ生成", "商品カルテ編集","商品カルテ一覧"])
-selected_theme = st.sidebar.selectbox("📊 配色テーマ", list(COLOR_PALETTES.keys()))
+selected_theme = st.sidebar.selectbox("📊 グラフの配色テーマ", list(COLOR_PALETTES.keys()))
 theme_colors = COLOR_PALETTES[selected_theme]
 
 if df is not None:
@@ -550,11 +550,16 @@ if df is not None:
             edit_memo = st.text_area("スタッフメモ・備考", value=memo_val, height=100)
 
             # --- 画像アップロードエリア ---
+            # --- 画像エリア ---
             st.subheader("📸 商品画像")
+            delete_image = False # 削除フラグの初期化
+            
             if current_img_url:
                 st.image(current_img_url, caption="現在登録されている画像", width=200)
+                # 削除ボタンの代わりにチェックボックスを設置
+                delete_image = st.checkbox("🗑️ この画像を削除する")
             
-            uploaded_file = st.file_uploader("スマホで撮影または画像を選択", type=["jpg", "jpeg", "png"])
+            uploaded_file = st.file_uploader("新しい画像を選択（上書き）", type=["jpg", "jpeg", "png"])
 
             # --- 保存ボタン ---
             if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
@@ -562,40 +567,53 @@ if df is not None:
                     st.error("商品名を入力してください。")
                 else:
                     with st.spinner("データを保存中..."):
-                        # ここで保存処理を実行
                         now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
                         now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
-                        final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
                         
-                        # 画像処理
-                        new_image_url = current_img_url
-                        if uploaded_file:
+                        # --- 画像URLの決定ロジック ---
+                        if delete_image:
+                            # 削除にチェックが入っていたら空にする
+                            new_image_url = ""
+                        elif uploaded_file:
+                            # 新しいファイルがあればアップロード
                             res_url = upload_to_imgbb(uploaded_file)
-                            if res_url:
-                                new_image_url = res_url
+                            new_image_url = res_url if res_url else current_img_url
+                        else:
+                            # 何もしなければ今のURLを維持
+                            new_image_url = current_img_url
 
-                        new_row = [final_base_date, now_str, edit_author, edit_item_name, "", edit_official_info, "", edit_memo, new_image_url]
+                        # 保存データの作成
+                        new_row = [
+                            base_date if base_date else now_str, # A: 新規
+                            now_str,                             # B: 更新
+                            edit_author,                         # C: 作成者
+                            edit_item_name,                      # D: 商品名
+                            "",                                  # E: AIコピー
+                            edit_official_info,                  # F: 公式情報
+                            "",                                  # G: ポップ案
+                            edit_memo,                           # H: メモ
+                            new_image_url                        # I: 画像URL
+                        ]
 
-                        # 上書き判定
+                        # (以下、スプレッドシートへの update / append 処理は前と同じ)
                         all_records = sheet_karte.get_all_records()
                         df_all = pd.DataFrame(all_records)
                         
                         if not df_all.empty and edit_item_name in df_all["商品名"].values:
                             row_index = df_all[df_all["商品名"] == edit_item_name].index[0] + 2
-                            existing_base_date = df_all.loc[df_all["商品名"] == edit_item_name, "新規"].values[0] if "新規" in df_all.columns else final_base_date
+                            existing_base_date = df_all.loc[df_all["商品名"] == edit_item_name, "新規"].values[0] if "新規" in df_all.columns else now_str
                             new_row[0] = str(existing_base_date) 
                             sheet_karte.update(range_name=f"A{row_index}:I{row_index}", values=[new_row])
-                            st.success(f"「{edit_item_name}」を更新しました！")
+                            st.success("画像を削除・更新しました！")
                         else:
                             sheet_karte.append_row(new_row)
-                            st.success(f"「{edit_item_name}」を新規登録しました！")
+                            st.success("新規登録しました！")
 
-                        st.balloons()
                         st.rerun()
 
         except Exception as e:
             st.error(f"システムエラーが発生しました: {e}")
-            
+
     elif menu == "商品カルテ一覧":
         st.header("📋 登録済み商品カルテ一覧")
         try:
