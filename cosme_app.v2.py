@@ -984,29 +984,103 @@ with tab3:
     pass
 #--- Tab 4: 商品比較分析 ---
 with tab4:
-    # (前回作った2商品の比較コード)
     st.subheader("⚔️ 2つの商品を比較する")
     
-    # 商品選択（比較用）
+    # 1. 比較する2つの商品を選択
     target_items = sorted(sub_df[conf["item_col"]].dropna().unique())
-    col_comp1, col_comp2 = st.columns(2)
     
-    with col_comp1:
-        item_a = st.selectbox("商品A（基準）", target_items, key="comp_item_a")
-    with col_comp2:
-        item_b = st.selectbox("商品B（比較対象）", target_items, index=min(1, len(target_items)-1), key="comp_item_b")
-
-    if item_a == item_b:
-        st.warning("⚠️ 同じ商品が選択されています。比較するには別の商品を選んでください。")
+    if len(target_items) < 2:
+        st.warning("⚠️ 比較するには、現在の条件に一致する商品が少なくとも2つ必要です。")
     else:
-        # 内部タブで表示切り替え
-        sub_tab_chart, sub_tab_dist = st.tabs(["📊 レーダー比較", "📉 分布の比較"])
+        col_comp1, col_comp2 = st.columns(2)
+        with col_comp1:
+            item_a = st.selectbox("商品A（基準）", target_items, key="comp_item_a")
+        with col_comp2:
+            # 商品Bは、あれば2番目の商品、なければ1番目を選択
+            item_b = st.selectbox("商品B（比較対象）", target_items, index=min(1, len(target_items)-1), key="comp_item_b")
 
-        # データの準備
-        df_a = sub_df[sub_df[conf["item_col"]] == item_a]
-        df_b = sub_df[sub_df[conf["item_col"]] == item_b]
-        stats_a = df_a[conf["scores"]].mean()
-        stats_b = df_b[conf["scores"]].mean()
+        if item_a == item_b:
+            st.warning("⚠️ 同じ商品が選択されています。別の商品を選んでください。")
+        else:
+            # --- データ準備 ---
+            df_a = sub_df[sub_df[conf["item_col"]] == item_a]
+            df_b = sub_df[sub_df[conf["item_col"]] == item_b]
+            
+            valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
+            # 数値変換を確実に行う
+            stats_a = df_a[valid_scores].apply(pd.to_numeric, errors='coerce').mean()
+            stats_b = df_b[valid_scores].apply(pd.to_numeric, errors='coerce').mean()
+
+            # --- 強みの差を分析 ---
+            diff = stats_a - stats_b
+            if not diff.dropna().empty:
+                best_for_a = diff.idxmax()
+                best_for_b = diff.idxmin()
+                st.info(f"💡 分析結果：**{item_a}** は「{best_for_a}」が強く、**{item_b}** は「{best_for_b}」が比較的高い評価です。")
+
+            # --- サブタブの作成 ---
+            sub_tab_chart, sub_tab_dist = st.tabs(["📊 レーダー比較", "📉 分布の比較"])
+
+            with sub_tab_chart:
+                import plotly.graph_objects as go
+                fig_comp = go.Figure()
+
+                # 商品Aの描画
+                r_a = list(stats_a.values) + [stats_a.values[0]]
+                theta = list(valid_scores) + [valid_scores[0]]
+                fig_comp.add_trace(go.Scatterpolar(
+                    r=r_a, theta=theta, fill='toself', name=item_a, 
+                    line_color=theme_colors[0] if 'theme_colors' in locals() else 'pink',
+                    opacity=0.7
+                ))
+
+                # 商品Bの描画
+                r_b = list(stats_b.values) + [stats_b.values[0]]
+                fig_comp.add_trace(go.Scatterpolar(
+                    r=r_b, theta=theta, fill='toself', name=item_b, 
+                    line_color='skyblue',
+                    opacity=0.5
+                ))
+
+                fig_comp.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 5])),
+                    height=450, margin=dict(l=60, r=60, t=30, b=30),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="center", x=0.5)
+                )
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+            with sub_tab_dist:
+                import plotly.express as px
+                # 2つの商品を結合して縦持ちにする（エラー回避処理付き）
+                combined_df = pd.concat([df_a, df_b])
+                # スコアを数値化
+                for s in valid_scores:
+                    combined_df[s] = pd.to_numeric(combined_df[s], errors='coerce')
+                
+                dist_comp_data = combined_df.melt(
+                    id_vars=[conf["item_col"]], 
+                    value_vars=valid_scores, 
+                    var_name="項目", value_name="スコア"
+                ).dropna(subset=["スコア"])
+
+                if not dist_comp_data.empty:
+                    fig_dist_comp = px.box(
+                        dist_comp_data, x="項目", y="スコア", 
+                        color=conf["item_col"],
+                        points="all",
+                        color_discrete_map={
+                            item_a: theme_colors[0] if 'theme_colors' in locals() else 'pink', 
+                            item_b: 'skyblue'
+                        }
+                    )
+                    fig_dist_comp.update_layout(
+                        height=450, boxmode='group',
+                        yaxis=dict(range=[0, 5.5]),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="center", x=0.5)
+                    )
+                    st.plotly_chart(fig_dist_comp, use_container_width=True)
+                else:
+                    st.warning("比較できる詳細データがありません。")
     pass
 
 # --- Tab 5: その他内訳 ---
