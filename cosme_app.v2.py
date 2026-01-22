@@ -28,14 +28,49 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     model = None
 
-# スプレッドシート接続関数
+# ここです！
 def get_gspread_client():
     s_acc = st.secrets["gcp_service_account"]
     credentials = Credentials.from_service_account_info(
         s_acc,
+        # ここに "https://www.googleapis.com/auth/drive" が入っていればOKです！
         scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     )
     return gspread.authorize(credentials)
+
+from googleapiclient.http import MediaIoBaseUpload
+import io
+from googleapiclient.discovery import build
+
+def upload_to_drive(uploaded_file, file_name):
+    """Googleドライブに画像をアップロードして直リンクを返す"""
+    try:
+        # get_gspread_clientの認証情報を流用してドライブサービスを作成
+        client = get_gspread_client()
+        drive_service = build('drive', 'v3', credentials=client.auth)
+        
+        # ★★★ 保存用フォルダのIDをここに入れてください ★★★
+        folder_id = "10QwrFD5KdfeKiyf5eNLJoN2DPYh6DGWu?usp=sharing" 
+        
+        file_metadata = {
+            'name': file_name,
+            'parents': [folder_id]
+        }
+        
+        # ファイルの内容をメモリ上に読み込む
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), 
+                                  mimetype=uploaded_file.type, 
+                                  resumable=True)
+        
+        # ドライブにアップロード実行
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        file_id = file.get('id')
+        
+        # 直リンクURLを生成（この形式ならStreamlitで直接表示できます）
+        return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
+    except Exception as e:
+        st.error(f"ドライブへの保存に失敗しました: {e}")
+        return None
 
 # 定数・カラーパレット
 COL_GENRE = "今回ご使用の商品のジャンルを選択してください。"
@@ -376,11 +411,24 @@ if df is not None:
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.subheader("📖 商品情報・指示")
+            # ★ 商品名と画像を横に並べて表示
+            title_col, img_preview_col = st.columns([2, 1])
+            with title_col:
+                st.subheader("📖 商品情報・指示")
+            
+            # 選択中の商品の画像URLを取得
+            current_item_data = next((row for row in saved_records if str(row.get('商品名')) == str(selected_item)), {})
+            img_url = current_item_data.get("画像URL", "")
+
+            with img_preview_col:
+                if img_url:
+                    st.image(img_url, use_container_width=True)
+                else:
+                    st.caption("🖼️ 画像未登録")
+
             input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150, key="input_info_area")
             human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に", key="input_hint")
             run_generate = st.button("🚀 AIポップコピーを生成", key="btn_generate_ai_pop")
-
         with col2:
             st.subheader("📊 顧客の声（分析結果）")
             item_stats = sub_df[sub_df[conf["item_col"]] == selected_item][conf["scores"]].mean()
@@ -458,8 +506,8 @@ if df is not None:
             mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
 
             # 初期値の設定
-            target_item_name, official_info_val, memo_val, author_val = "", "", "", ""
-            base_date = "" # 初回作成日保持用
+            target_item_name, official_info_val, memo_val, author_val, current_img_url = "", "", "", "", ""
+            base_date = ""
 
             if mode == "既存データから選んで編集" and not df_karte.empty:
                 item_list = [n for n in df_karte["商品名"].unique() if n]
@@ -470,9 +518,12 @@ if df is not None:
                 official_info_val = latest_row.get("公式情報", "")
                 memo_val = latest_row.get("メモ", "")
                 author_val = latest_row.get("作成者", "")
-                base_date = latest_row.get("日付", "") # 初回の日付を引き継ぐ
+                base_date = latest_row.get("日付", "")
+                current_img_url = latest_row.get("画像URL", "") # 既存の画像URLを取得
 
             st.markdown("---")
+            
+            # --- 入力エリア ---
             col_a, col_b = st.columns(2)
             with col_a:
                 edit_item_name = st.text_input("商品名", value=target_item_name)
@@ -482,28 +533,50 @@ if df is not None:
             edit_official_info = st.text_area("公式情報（特徴・成分など）", value=official_info_val, height=150)
             edit_memo = st.text_area("スタッフメモ・備考", value=memo_val, height=100)
 
+            # --- 画像アップロードエリア ---
+            st.subheader("📸 商品画像")
+            if current_img_url:
+                st.image(current_img_url, caption="現在登録されている画像", width=200)
+            
+            uploaded_file = st.file_uploader("スマホで撮影または画像を選択（新しく登録・上書きする場合）", type=["jpg", "jpeg", "png"])
+
             if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
                 if not edit_item_name:
                     st.error("商品名を入力してください。")
                 else:
-                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # 新規なら今日の日付、既存なら元の日付を使用
-                    final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
-                    
-                    # 列順: 日付, 更新, 作成者, 商品名, AIコピー, 公式情報, ポップ案, メモ
-                    new_row = [
-                        final_base_date, # 初回作成日
-                        now_str,         # 更新日時
-                        edit_author,     # 作成者
-                        edit_item_name,  # 商品名
-                        "",              # AIコピー
-                        edit_official_info, 
-                        "",              # ポップ案
-                        edit_memo
-                    ]
-                    sheet_karte.append_row(new_row)
-                    st.success(f"「{edit_item_name}」の情報を保存しました！")
-                    st.balloons()
+                    with st.spinner("データを保存中..."):
+                        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
+                        
+                        # 1. 画像の処理
+                        new_image_url = current_img_url # 基本は今のURLを維持
+                        if uploaded_file:
+                            # 新しいファイルがアップロードされたらドライブへ保存
+                            file_name = f"{edit_item_name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.png"
+                            res_url = upload_to_drive(uploaded_file, file_name)
+                            if res_url:
+                                new_image_url = res_url
+
+                        # 2. スプレッドシートへの書き込み
+                        # 列順: 日付, 更新, 作成者, 商品名, AIコピー, 公式情報, ポップ案, メモ, 画像URL
+                        new_row = [
+                            final_base_date, 
+                            now_str, 
+                            edit_author, 
+                            edit_item_name, 
+                            "", # AIコピー
+                            edit_official_info, 
+                            "", # ポップ案
+                            edit_memo,
+                            new_image_url # ★画像URLを最後に追加
+                        ]
+                        
+                        sheet_karte.append_row(new_row)
+                        st.success(f"「{edit_item_name}」の情報を保存しました！")
+                        st.balloons()
+                        # 保存後にプレビューを更新するため再読み込み
+                        st.rerun()
+
         except Exception as e:
             st.error(f"エラー: {e}")
 
@@ -518,26 +591,43 @@ if df is not None:
             if records:
                 df_karte = pd.DataFrame(records)
                 st.subheader("📊 全商品アーカイブ")
-                # --- メモ列を追加して表示 ---
-                cols = ["日付", "更新","作成者", "商品名", "AIコピー", "ポップ案", "メモ"]
+                
+                # 表示する列の整理（画像URLは表には出さず、詳細表示で使う）
+                cols = ["日付", "更新", "作成者", "商品名", "AIコピー", "ポップ案", "メモ"]
                 display_cols = [c for c in cols if c in df_karte.columns]
                 st.dataframe(df_karte[display_cols], use_container_width=True)
 
                 st.markdown("---")
                 st.subheader("🔍 商品別・詳細アーカイブ")
                 item_list = [n for n in df_karte["商品名"].unique() if n]
+                
                 if item_list:
                     target_item = st.selectbox("詳しく見たい商品を選択", item_list, key="karte_pro_select")
+                    # 最新のデータを取得
                     item_data = df_karte[df_karte["商品名"] == target_item].iloc[-1]
                     
-                    c1, c2 = st.columns(2)
+                    # 3カラム構成にして、左側に画像を配置
+                    c1, c2, c3 = st.columns([1, 1.2, 1.2])
+                    
                     with c1:
-                        st.markdown(f"### 🏷️ {target_item}")
-                        st.info(f"**公式情報:**\n\n{item_data.get('公式情報', '未登録')}")
-                        # --- 詳細欄にもメモを表示 ---
-                        st.warning(f"**📝 スタッフメモ・備考:**\n\n{item_data.get('メモ', 'なし')}")
+                        st.write("📸 **商品画像**")
+                        img_url = item_data.get("画像URL", "")
+                        if img_url:
+                            st.image(img_url, use_container_width=True, caption=target_item)
+                        else:
+                            st.info("画像は登録されていません")
+
                     with c2:
-                        st.success(f"**AI提案コピー:**\n\n{item_data.get('AIコピー', '未登録')}")
-                        st.success(f"**決定ポップ案:**\n\n{item_data.get('ポップ案', '未作成')}")
+                        st.markdown(f"### 🏷️ {target_item}")
+                        st.info(f"**📖 公式情報:**\n\n{item_data.get('公式情報', '未登録')}")
+                        st.warning(f"**📝 スタッフメモ・備考:**\n\n{item_data.get('メモ', 'なし')}")
+                    
+                    with c3:
+                        st.success(f"**🤖 AI提案コピー:**\n\n{item_data.get('AIコピー', '未登録')}")
+                        st.success(f"**✨ 決定ポップ案:**\n\n{item_data.get('ポップ案', '未作成')}")
+                        st.caption(f"最終更新: {item_data.get('更新', '---')}")
+            else:
+                st.info("まだカルテが登録されていません。")
+
         except Exception as e:
             st.error(f"表示エラー: {e}")
