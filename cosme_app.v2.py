@@ -299,7 +299,7 @@ if df is not None:
                         
                         if row_idx:
                             headers = sheet_k.row_values(1)
-                            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                             
                             # メモ欄の更新
                             if "メモ" in headers:
@@ -545,7 +545,7 @@ if df is not None:
                     st.error("商品名を入力してください。")
                 else:
                     with st.spinner("データを保存中..."):
-                        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
                         
                         # 1. 画像の処理
