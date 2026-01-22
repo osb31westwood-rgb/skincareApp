@@ -417,14 +417,30 @@ if df is not None:
                 st.subheader("📖 商品情報・指示")
             
             # 選択中の商品の画像URLを取得
-            current_item_data = next((row for row in saved_records if str(row.get('商品名')) == str(selected_item)), {})
-            img_url = current_item_data.get("画像URL", "")
+            # --- ここから差し替え ---
+            import pandas as pd
+            df_temp = pd.DataFrame(saved_records)
+            
+            # 選択中の商品名に一致する行を探す
+            item_row = df_temp[df_temp["商品名"] == selected_item]
 
             with img_preview_col:
-                if img_url:
-                    st.image(img_url, use_container_width=True)
+                if not item_row.empty:
+                    # 「画像URL」列が存在するか確認
+                    if "画像URL" in item_row.columns:
+                        # 一番新しいデータ（最後の行）のURLを取得
+                        img_url = item_row.iloc[-1]["画像URL"]
+                        
+                        # URLがちゃんと入っているかチェック
+                        if pd.notna(img_url) and str(img_url).startswith("http"):
+                            st.image(img_url, use_container_width=True)
+                        else:
+                            st.caption("🖼️ 画像はまだ登録されていません")
+                    else:
+                        st.error("⚠️ スプレッドシートに「画像URL」列がありません")
                 else:
-                    st.caption("🖼️ 画像未登録")
+                    st.caption("🔍 商品データが見つかりません")
+            # --- ここまで差し替え ---
 
             input_info = st.text_area("カルテからの引継ぎ情報", value=saved_info, height=150, key="input_info_area")
             human_hint = st.text_input("AIへの追加指示", placeholder="例：30代向け、上品に", key="input_hint")
