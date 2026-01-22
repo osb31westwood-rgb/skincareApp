@@ -462,36 +462,50 @@ if df is not None:
         # 4. 生成処理と薬機法チェック
         if run_generate:
             if model:
-                with st.spinner("AIが薬機法を考慮して生成中..."):
+                with st.spinner("AIが画像と情報を分析して生成中..."):
                     try:
+                        # --- 画像解析の準備 ---
+                        image_data = None
+                        if img_url:
+                            try:
+                                import requests
+                                from PIL import Image
+                                import io
+                                # img_urlから画像をダウンロード
+                                img_res = requests.get(img_url)
+                                image_data = Image.open(io.BytesIO(img_res.content))
+                            except:
+                                st.warning("画像の読み込みに失敗したため、テキストのみで生成します。")
+
+                        # --- プロンプトの構築 ---
                         prompt = f"""
-                        以下の情報をもとに、コスメの店頭POP用キャッチコピーを3案提案してください。
+                        あなたはこの化粧品を販売するプロのPOPライターです。
+                        {'添付画像からパッケージの色味やデザインの雰囲気を読み取り、' if image_data else ''}
+                        以下の情報と顧客分析を組み合わせて、思わず手に取りたくなる店頭POP用キャッチコピーを3案提案してください。
+
                         【最重要】薬機法（化粧品広告ガイドライン）を遵守し、治療効果や「最高」等の誇大表現は避けてください。
                         商品名: {selected_item}
                         特徴: {input_info}
                         要望: {human_hint}
-                        分析: {analysis_hint}
+                        分析結果: {analysis_hint}
+                        
+                        【出力ルール】:
+                        - パッケージの雰囲気に合う言葉選びをすること
+                        - ターゲットの心に刺さる強い言葉を1つ入れること
                         """
-                        res = model.generate_content(prompt)
+
+                        # --- Geminiへのリクエスト (画像があればリスト形式で渡す) ---
+                        if image_data:
+                            res = model.generate_content([prompt, image_data])
+                        else:
+                            res = model.generate_content(prompt)
+                            
                         st.session_state["generated_copy"] = res.text
-                    except Exception as e: st.error(f"生成エラー: {e}")
+                    except Exception as e: 
+                        st.error(f"生成エラー: {e}")
             else:
                 st.error("APIキーが設定されていません。")
-
-        # 5. 結果表示と保存
-        if "generated_copy" in st.session_state:
-            st.markdown("---")
-            
-            # 💡 ここで薬機法セルフチェックを表示
-            st.subheader("⚠️ 薬機法セルフチェック（辞書照合）")
-            found_ng = False
-            for word, reason in ng_dict.items():
-                if word in st.session_state["generated_copy"]:
-                    st.error(f"**NGワード検知: 「{word}」** → {reason}")
-                    found_ng = True
-            if not found_ng:
-                st.success("✅ 現在のNG辞書に抵触する表現は見つかりませんでした。")
-
+                
             st.success("🤖 AI提案のコピー")
             st.write(st.session_state["generated_copy"])
             
@@ -510,6 +524,7 @@ if df is not None:
                         else: st.error("「ポップ案」列が見つかりません。")
                     except Exception as e: st.error(f"保存失敗: {e}")
                 else: st.warning("先に「商品カルテ編集」からこの商品を登録してください。")
+
     elif menu == "商品カルテ編集":
         st.header("📋 商品カルテ：編集・管理")
         try:
