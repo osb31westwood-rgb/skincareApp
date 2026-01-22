@@ -783,32 +783,32 @@ elif menu == "📈 アンケート分析":
         with tab2:
             st.subheader("🗣️ 全ジャンル・全アイテムの生の声")
             feedback_col = "ご感想やご不満点がございましたら、ご自由にご入力ください。"
+            
+            # --- 修正ポイント：商品名の列を自動特定 ---
+            item_col_name = conf["item_col"] # 設定ファイルから正しい列名を取得
+            
+            # データがあるか確認
             voice_base_df = sub_df[sub_df[feedback_col].fillna("").str.strip() != ""]
 
             with st.expander("🛠️ 詳細フィルタで声を絞り込む", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
-                    f_items = st.multiselect("特定の商品", sorted(voice_base_df["商品名"].unique()), key="v_f_items")
-                    f_word = st.text_input("キーワード検索", placeholder="例：ベタつく、最高", key="v_f_word")
+                    # ここで商品名の列を指定
+                    item_options = sorted(voice_base_df[item_col_name].unique()) if not voice_base_df.empty else []
+                    f_items = st.multiselect("特定の商品", item_options, key="v_f_items")
+                    f_word = st.text_input("キーワード検索", placeholder="例：ベタつく", key="v_f_word")
                 with c2:
-                    f_skin = st.multiselect("肌悩み", sorted(voice_base_df["肌悩み"].dropna().unique()), key="v_f_skin")
-                    f_gender = st.multiselect("性別（追加絞り込み）", ["女性", "男性", "回答しない／その他"], key="v_f_gender")
+                    # 肌悩みも列があるか確認してから
+                    skin_col = "肌悩み"
+                    skin_options = sorted(voice_base_df[skin_col].dropna().unique()) if skin_col in voice_base_df.columns else []
+                    f_skin = st.multiselect("肌悩み", skin_options, key="v_f_skin")
+                    f_gender = st.multiselect("性別（追加）", ["女性", "男性", "回答しない／その他"], key="v_f_gender")
 
+            # フィルタ適用
             f_df = voice_base_df.copy()
-            if f_items: f_df = f_df[f_df["商品名"].isin(f_items)]
-            if f_skin: f_df = f_df[f_df["肌悩み"].isin(f_skin)]
-            if f_gender: f_df = f_df[f_df["性別"].isin(f_gender)]
-            if f_word: f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
-
-            st.write(f"📈 該当件数: **{len(f_df)}** 件")
-            if not f_df.empty:
-                for _, row in f_df.iterrows():
-                    with st.container():
-                        st.caption(f"📍 {row['商品名']} | {row['性別']} | {row['年代']} | 悩み: {row['肌悩み']}")
-                        st.info(row[feedback_col])
-            else:
-                st.warning("条件に一致する声が見つかりませんでした。")
-
+            if f_items: 
+                f_df = f_df[f_df[item_col_name].isin(f_items)] # ここも修正
+        
         # --- Tab 3: その他（分類漏れ）確認 ---
         with tab3:
             st.subheader("🔍 その他項目の内訳確認")
