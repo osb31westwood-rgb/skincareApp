@@ -197,8 +197,7 @@ with st.sidebar:
             "✨ AIポップ作成", 
             "📋 商品カルテ編集", 
             "📚 商品カルテ一覧", 
-            "📊 アンケート分析（チャート）", 
-            "📈 アンケート分析（分布図）"
+            "📈 アンケート分析"
         ],
         icons=["qr-code-scan", "magic", "pencil-square", "collection", "bar-chart-line", "graph-up"],
         menu_icon="cast",
@@ -728,132 +727,97 @@ elif menu == "📚 商品カルテ一覧":
             st.error(f"表示エラー: {e}")
             
             
-elif menu == "📊 アンケート分析（チャート）":
-        st.header(f"📊 アンケート分析（チャート） ({selected_theme})")
-        
-        # --- 設定エリア ---
-        col_chart1, col_chart2 = st.columns([2, 1])
-        with col_chart2:
-            st.write("🔧 チャート設定")
-            show_grid = st.toggle("グリッド線を表示", value=True)
-            show_axis = st.toggle("軸ラベルを表示", value=True)
-            # ★追加：表示モードの切り替え
-            display_mode = st.radio("表示形式", ["重ねて比較", "横に並べる"], horizontal=True)
+elif menu == "📈 アンケート分析":
+    st.header("📊 アンケートデータ詳細分析")
+    
+    # データの存在チェック
+    if sub_df.empty:
+        st.warning("⚠️ 現在の絞り込み条件に一致するデータがありません。サイドバーで条件を変更してください。")
+    else:
+        # タブの設定
+        tab1, tab2 = st.tabs(["📈 スコア分析", "💬 自由記述・生の声"])
 
-        items = sorted(sub_df[conf["item_col"]].dropna().unique())
-        selected_items = st.multiselect("比較する商品を選択", items)
-        
-        if selected_items:
-            valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
+        with tab1:
+            st.subheader("📊 多角的な評価分析")
             
-            if display_mode == "重ねて比較":
-                fig = go.Figure()
-                for i, item in enumerate(selected_items):
-                    item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
-                    # 閉じたチャートにするためにデータの終点を始点と繋ぐ
-                    r_values = item_data.values.tolist()
-                    r_values += r_values[:1]
-                    theta_values = valid_scores + [valid_scores[0]]
-                    
-                    color = theme_colors[i % len(theme_colors)]
-                    fig.add_trace(go.Scatterpolar(
-                        r=r_values, 
-                        theta=theta_values, 
-                        fill='toself', 
-                        name=item, 
-                        line=dict(color=color), 
-                        fillcolor=color, 
-                        opacity=0.5
+            # --- 1. 商品選択と性別フィルター ---
+            target_items = sorted(sub_df[conf["item_col"]].dropna().unique())
+            col_sel1, col_sel2 = st.columns(2)
+            with col_sel1:
+                selected_analysis_item = st.selectbox("分析する商品を選択", target_items, key="analysis_item_select")
+            with col_sel2:
+                gender_target = st.radio("表示対象", ["全て", "女性", "男性", "回答しない／その他"], horizontal=True)
+
+            # データの計算
+            item_data = sub_df[sub_df[conf["item_col"]] == selected_analysis_item]
+            if gender_target != "全て":
+                item_data = item_data[item_data["性別"] == gender_target]
+
+            # --- 2. 2カラムで「チャート」と「分布」を並べる ---
+            chart_col, dist_col = st.columns([1, 1])
+
+            with chart_col:
+                st.write("📌 平均評価（バランス）")
+                item_stats = item_data[conf["scores"]].mean()
+                if not item_stats.dropna().empty:
+                    import plotly.graph_objects as go
+                    # チャートを閉じる処理
+                    r_values = list(item_stats.values) + [item_stats.values[0]]
+                    theta_values = list(conf["scores"]) + [conf["scores"][0]]
+
+                    fig_spy = go.Figure(go.Scatterpolar(
+                        r=r_values, theta=theta_values, fill='toself',
+                        line_color=theme_colors[0] if 'theme_colors' in locals() else 'pink'
                     ))
-                
-                fig.update_layout(
-                    polar=dict(
-                        radialaxis=dict(visible=show_grid, range=[0, 5], showticklabels=show_axis),
-                        angularaxis=dict(visible=show_grid, showticklabels=show_axis)
-                    ),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=True
+                    fig_spy.update_layout(height=300, margin=dict(l=20,r=20,t=20,b=20), polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
+                    st.plotly_chart(fig_spy, use_container_width=True)
+                else:
+                    st.warning("データ不足")
+
+            with dist_col:
+                st.write("📌 評価のバラツキ（分布）")
+                # スコアを縦持ちに変換して分布図を作成
+                dist_data = item_data[conf["scores"]].melt(var_name="項目", value_name="スコア")
+                if not dist_data.empty:
+                    import plotly.express as px
+                    fig_dist = px.box(
+                        dist_data, x="項目", y="スコア",
+                        points="all", # 全データ点を表示
+                        color_discrete_sequence=[theme_colors[0]] if 'theme_colors' in locals() else ['pink']
+                    )
+                    fig_dist.update_layout(height=300, margin=dict(l=20,r=20,t=20,b=20), yaxis=dict(range=[0, 5.5]))
+                    st.plotly_chart(fig_dist, use_container_width=True)
+
+            # --- 3. 分析のヒント表示 ---
+            if not item_stats.dropna().empty:
+                top_score = item_stats.idxmax()
+                st.success(f"💡 分析ヒント: この商品は **{top_score}** が最も評価されています。分布図で点がバラけている場合は、人によって好みが分かれるポイントです。")
+        with tab2:
+            st.subheader("お客様からの具体的な感想・不満点")
+            
+            # アイテムタイプが「その他」の人だけの声を抽出するボタン
+            other_col = "商品のアイテムタイプにて『その他』を選んだ方は入力してください。"
+            feedback_col = "ご感想やご不満点がございましたら、ご自由にご入力ください。"
+            
+            filter_other = st.checkbox("『その他』タイプの回答のみ表示")
+            
+            if filter_other:
+                # 「その他」の列が空でない、または「その他」と書かれているデータを抽出
+                display_df = sub_df[sub_df[conf["type_col"]] == "その他"]
+            else:
+                display_df = sub_df
+
+            # 表示する列を整理（列が存在するか確認しながら）
+            cols_to_show = ["商品名", "性別", "年代", "肌悩み", other_col, feedback_col]
+            # 実際にデータフレームにある列だけをピックアップ
+            actual_cols = [c for c in cols_to_show if c in display_df.columns]
+
+            if not display_df.empty:
+                st.write(f"該当件数: {len(display_df)}件")
+                st.dataframe(
+                    display_df[actual_cols],
+                    use_container_width=True,
+                    hide_index=True
                 )
-                st.plotly_chart(fig, use_container_width=True)
-
-            else: # 横に並べる
-                cols = st.columns(len(selected_items))
-                for i, item in enumerate(selected_items):
-                    with cols[i]:
-                        item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
-                        r_values = item_data.values.tolist()
-                        r_values += r_values[:1]
-                        theta_values = valid_scores + [valid_scores[0]]
-                        
-                        fig_sub = go.Figure(go.Scatterpolar(
-                            r=r_values, theta=theta_values, fill='toself', 
-                            name=item, line=dict(color=theme_colors[i % len(theme_colors)])
-                        ))
-                        fig_sub.update_layout(
-                            polar=dict(
-                                radialaxis=dict(visible=show_grid, range=[0, 5], showticklabels=False),
-                                angularaxis=dict(visible=show_grid, showticklabels=show_axis)
-                            ),
-                            title=item, showlegend=False, height=300
-                        )
-                        st.plotly_chart(fig_sub, use_container_width=True)
-
-            # --- 【新機能】分析結果をカルテへ送る ---
-            st.markdown("---")
-            st.subheader("📝 分析結果をカルテに記録")
-            col_save1, col_save2 = st.columns([2, 1])
-            
-            with col_save1:
-                target_save_item = st.selectbox("記録する商品を選択", selected_items, key="save_analysis_item")
-                # その商品の最高評価項目を特定
-                target_stats = sub_df[sub_df[conf["item_col"]] == target_save_item][valid_scores].mean()
-                best_feature = target_stats.idxmax()
-            
-            with col_save2:
-                st.write(" ") # 余白
-                if st.button("💾 分析結果をメモに追記"):
-                    try:
-                        client = get_gspread_client()
-                        sh = client.open("Cosme Data")
-                        sheet_k = sh.worksheet("カルテ")
-                        records = sheet_k.get_all_records()
-                        
-                        # 行の特定
-                        row_idx = None
-                        for i, r in enumerate(records):
-                            if str(r.get("商品名")) == target_save_item:
-                                row_idx = i + 2
-                                break
-                        
-                        if row_idx:
-                            headers = sheet_k.row_values(1)
-                            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                            
-                            # メモ欄の更新
-                            if "メモ" in headers:
-                                col_memo = headers.index("メモ") + 1
-                                current_memo = sheet_k.cell(row_idx, col_memo).value or ""
-                                analysis_msg = f"【自動追記】分析の結果、{best_feature}が最も高い評価でした。({now_str})"
-                                new_memo = f"{current_memo}\n{analysis_msg}".strip()
-                                
-                                # 更新日時も更新
-                                if "更新" in headers:
-                                    sheet_k.update_cell(row_idx, headers.index("更新") + 1, now_str)
-                                
-                                sheet_k.update_cell(row_idx, col_memo, new_memo)
-                                st.success(f"「{target_save_item}」のメモに分析結果を追記しました！")
-                                st.balloons()
-                            else:
-                                st.error("「メモ」列が見つかりません。")
-                        else:
-                            st.warning("この商品はまだカルテに登録されていません。")
-                    except Exception as e:
-                        st.error(f"保存失敗: {e}")
-                        
-                        
-elif menu == "📈 アンケート分析（分布図）":
-        st.header(f"📈 アンケート分析（分布図） ({selected_theme})")
-        valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
-        x_ax = st.selectbox("横軸", valid_scores, index=0)
-        y_ax = st.selectbox("縦軸", valid_scores, index=len(valid_scores)-1 if len(valid_scores)>1 else 0)
-        fig = px.scatter(sub_df, x=x_ax, y=y_ax, color=COL_AGE, hover_name=conf["item_col"], color_discrete_sequence=theme_colors)
-        st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("該当する自由記述データはありませんでした。")
