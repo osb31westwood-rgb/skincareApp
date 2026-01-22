@@ -804,11 +804,42 @@ elif menu == "📈 アンケート分析":
                     f_skin = st.multiselect("肌悩み", skin_options, key="v_f_skin")
                     f_gender = st.multiselect("性別（追加）", ["女性", "男性", "回答しない／その他"], key="v_f_gender")
 
-            # フィルタ適用
+            # --- フィルタ適用 ---
             f_df = voice_base_df.copy()
             if f_items: 
-                f_df = f_df[f_df[item_col_name].isin(f_items)] # ここも修正
-        
+                f_df = f_df[f_df[item_col_name].isin(f_items)]
+            if f_skin: 
+                f_df = f_df[f_df["肌悩み"].isin(f_skin)]
+            if f_gender: 
+                f_df = f_df[f_df["性別"].isin(f_gender)]
+            if f_word: 
+                f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
+
+            st.write(f"📈 該当件数: **{len(f_df)}** 件")
+            st.markdown("---")
+
+            # --- 本文表示エリア ---
+            if not f_df.empty:
+                for idx, row in f_df.iterrows():
+                    # 1件ずつ枠（カード）で囲って表示
+                    with st.container(border=True):
+                        # ヘッダー情報を横並びにする
+                        meta_col1, meta_col2 = st.columns([3, 1])
+                        with meta_col1:
+                            st.markdown(f"**📍 {row[item_col_name]}**")
+                        with meta_col2:
+                            st.caption(f"{row['性別']} | {row['年代']}")
+                        
+                        # 肌悩みがあれば表示
+                        if "肌悩み" in row and pd.notna(row["肌悩み"]):
+                            st.caption(f"悩み: {row['肌悩み']}")
+                        
+                        # 本文をドーンと表示
+                        st.write(row[feedback_col])
+            else:
+                # フィルタで誰もいなくなった場合
+                st.info("🔍 条件に一致する「声」が見つかりませんでした。フィルタを緩めてみてください。")
+                
         # --- Tab 3: その他（分類漏れ）確認 ---
         with tab3:
             st.subheader("🔍 その他項目の内訳確認")
