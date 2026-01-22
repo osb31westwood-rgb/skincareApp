@@ -87,8 +87,7 @@ def upload_to_drive(uploaded_file, file_name):
             media_body=media, 
             fields='id',
             supportsAllDrives=True,
-            # ★追加：管理者の権限で、親フォルダ（あなたの容量）への書き込みを強制する
-            useDomainAdminAccess=False 
+            # ★追加：管理者の権限で、親フォルダ（あなたの容量）への書き込みを強制する 
         ).execute()
         
         file_id = file.get('id')
