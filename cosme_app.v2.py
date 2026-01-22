@@ -205,9 +205,9 @@ with st.sidebar:
         default_index=0,
         styles={
             "container": {"padding": "0!important", "background-color": "#fafafa"},
-            "icon": {"color": "#ff4b4b", "font-size": "18px"}, 
+            "icon": {"color": "#90C6C8", "font-size": "18px"}, 
             "nav-link": {"font-size": "14px", "text-align": "left", "margin": "0px", "--hover-color": "#eee"},
-            "nav-link-selected": {"background-color": "#ff4b4b"},
+            "nav-link-selected": {"background-color": "#90C6C8"},
         }
     )
 
@@ -223,8 +223,14 @@ st.markdown("---")
 
 if df is not None:
     # --- 共通の絞り込みフィルター ---
+    with st.expander("⚙️ データ絞り込み", expanded=True): # 最初は見せるためにTrueにしてみましょう
+        selected_theme = st.selectbox("📊 配色", list(COLOR_PALETTES.keys()))
+        theme_colors = COLOR_PALETTES[selected_theme]
+        
         genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
         conf = COLUMN_CONFIG[genre]
+        
+        # フィルター適用のロジックをここに全部書く
         sub_df = df[df[COL_GENRE] == genre].copy()
         
         types = sorted(sub_df[conf["type_col"]].dropna().unique())
@@ -242,6 +248,7 @@ if df is not None:
             (sub_df[conf["type_col"]].isin(selected_types)) &
             (sub_df["性別"].isin(selected_genders))
         ]
+        sub_df = sub_df[ (sub_df[COL_AGE].isin(selected_ages)) & ... ]
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
