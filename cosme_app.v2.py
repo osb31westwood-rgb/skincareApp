@@ -609,26 +609,47 @@ elif menu == "📋 商品カルテ編集":
                     else:
                         new_image_url = current_img_url
 
+                    # 保存データ A～K列 の定義（ここはそのまま）
                     new_row = [
-                        final_base_date, now_str, edit_author, main_cat, sub_cat, 
-                        edit_item_name, "", edit_official_info, "", edit_memo, new_image_url
-                    ]
+    final_base_date,    # A: 新規
+    now_str,            # B: 更新
+    edit_author,        # C: 作成者
+    main_cat,           # D: ジャンル
+    sub_cat,            # E: アイテムタイプ
+    edit_item_name,     # F: 商品名
+    "",                 # G: AIコピー
+    edit_official_info, # H: 公式情報
+    "",                 # I: ポップ案
+    edit_memo,          # J: メモ
+    new_image_url       # K: 画像URL
+]
 
-                    # 更新または新規追加のロジック
-                    if not df_karte.empty and edit_item_name in df_karte["商品名"].values:
-                        row_index = df_karte[df_karte["商品名"] == edit_item_name].index[0] + 2
+# --- ここから差し替え ---
+                    all_records = sheet_karte.get_all_records()
+                    df_all = pd.DataFrame(all_records)
+
+# 商品名が既に存在するかチェック
+                    if not df_all.empty and edit_item_name in df_all["商品名"].values:
+    # 既存データのインデックスを取得
+                        matching_rows = df_all[df_all["商品名"] == edit_item_name]
+                        row_index = matching_rows.index[0] + 2 
+    
+                        # 【改善ポイント】 "新規(登録日)"列が存在する場合のみ、元の値を維持
+                        if "新規" in df_all.columns:
+                            new_row[0] = str(matching_rows["新規"].values[0])
+    
+                        # 指定範囲（A列～K列）を更新
                         sheet_karte.update(range_name=f"A{row_index}:K{row_index}", values=[new_row])
-                        st.success(f"「{edit_item_name}」を更新しました！")
+                        st.success(f"「{edit_item_name}」の情報を更新しました！")
                     else:
+                        # 新規登録
                         sheet_karte.append_row(new_row)
                         st.success(f"「{edit_item_name}」を新規登録しました！")
-
-                    st.balloons()
-                    st.rerun()
+# --- ここまで差し替え --- 
 
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
-        
+
 elif menu == "📚 商品カルテ一覧":
         st.header("📋 登録済み商品カルテ一覧")
         try:
