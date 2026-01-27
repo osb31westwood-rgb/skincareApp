@@ -258,15 +258,27 @@ with st.sidebar:
            type_col_name = conf.get("type_col", "アイテムタイプ")
 
            if type_col_name in sub_df.columns:
-               types = sorted(sub_df[type_col_name].dropna().unique())
+            # --- 修正：複数列あっても1つにまとめてユニーク値を取得 ---
+               target_data = sub_df[type_col_name]
+               if isinstance(target_data, pd.DataFrame):
+                # 複数列ある場合は縦に積み上げて1列にする
+                combined_series = target_data.stack()
+               else:
+                # 1列だけならそのまま
+                combined_series = target_data
+            
+               types = sorted(combined_series.dropna().unique())
                selected_types = st.multiselect("アイテムタイプ", types)
+            # --------------------------------------------------
            else:
-               st.warning(f"⚠️ 列 '{type_col_name}' がデータに見つかりません。")
-               st.write("現在の列名:", sub_df.columns.tolist()) # 何が原因か画面で確認できる
-               selected_types = []
+             st.warning(f"⚠️ 列 '{type_col_name}' がデータに見つかりません。")
+             st.write("現在の列名:", sub_df.columns.tolist())
+             selected_types = []
+
+        # 年代の選択
         ages = sorted(sub_df[COL_AGE].unique())
         selected_ages = st.multiselect("年代", ages, default=ages)
-        
+
         genders = ["女性", "男性", "回答しない／その他"]
         selected_genders = st.multiselect("性別", genders, default=genders)
 
