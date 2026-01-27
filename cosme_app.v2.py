@@ -909,7 +909,8 @@ from google.oauth2.service_account import Credentials
 def get_gspread_client():
     # GitHubのSecrets（Streamlit経由）からJSONを読み込む
     # st.secrets["gcp_service_account"] の名前は自分の設定に合わせてね！
-    creds_dict = json.loads(st.secrets["gcp_service_account"])
+    # すでに辞書になってるから、そのまま使う！
+　　creds_dict = st.secrets["gcp_service_account"]
     
     # 権限の範囲（スコープ）を設定
     scopes = [
