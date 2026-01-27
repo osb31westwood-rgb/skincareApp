@@ -792,7 +792,19 @@ elif menu == "📈 アンケート分析":
                     show_axis = st.toggle("軸ラベルを表示", value=True, key="axis_t1")
                     display_mode = st.radio("表示形式", ["重ねて比較", "横に並べる"], horizontal=True, key="mode_t1")
 
-                items = sorted(sub_df[conf["item_col"]].dropna().unique())
+                item_col_name = conf["item_col"]
+                if item_col_name in sub_df.columns:
+                    target_items = sub_df[item_col_name]
+                    if isinstance(target_items, pd.DataFrame):
+                        # 複数列ある場合は、データを1列に積み上げる
+                        combined_items = target_items.stack()
+                    else:
+                        # 1列だけならそのまま
+                        combined_items = target_items
+    
+                    items = sorted(combined_items.dropna().unique())
+                else:
+                    items = []
                 selected_items = st.multiselect("比較する商品を選択", items, key="sel_t1")
                 
                 if selected_items:
