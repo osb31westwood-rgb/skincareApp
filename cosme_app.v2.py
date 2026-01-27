@@ -928,7 +928,18 @@ elif menu == "📈 アンケート分析":
                 with st.expander("🛠️ フィルタ", expanded=True):
                     c1, c2 = st.columns(2)
                     with c1:
-                        f_items = st.multiselect("特定の商品", sorted(voice_base_df[item_col_name].unique()) if not voice_base_df.empty else [], key="v_f_items")
+                        # --- 931行目付近の修正 ---
+                        item_col_name = conf["item_col"]
+                        target_items = voice_base_df[item_col_name]
+
+                        # 複数列あっても1列にまとめてからユニーク値を取得
+                        if isinstance(target_items, pd.DataFrame):
+                            combined_items = target_items.stack()
+                        else:
+                            combined_items = target_items
+
+                         # multiselectの選択肢を作成
+                        f_items = st.multiselect("特定の商品", sorted(combined_items.dropna().unique()))
                         f_word = st.text_input("検索", key="v_f_word")
                     with c2:
                         f_skin = st.multiselect("肌悩み", sorted(voice_base_df["肌悩み"].dropna().unique()) if "肌悩み" in voice_base_df.columns else [], key="v_f_skin")
