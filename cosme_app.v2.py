@@ -985,7 +985,22 @@ elif menu == "📈 アンケート分析":
                     with col1: item_a = st.selectbox("商品A", target_items, key="comp_a")
                     with col2: item_b = st.selectbox("商品B", target_items, index=1, key="comp_b")
                     if item_a != item_b:
-                        df_a, df_b = sub_df[sub_df[conf["item_col"]] == item_a], sub_df[sub_df[conf["item_col"]] == item_b]
+                        # --- 988行目の修正：複数列（商品名）のどこかに選んだ商品がある行を抽出 ---
+                        item_col = conf["item_col"]
+                        target_data = sub_df[item_col]
+
+                        if isinstance(target_data, pd.DataFrame):
+                            # 複数列ある場合：横方向に見て、どれか1列でも商品名が一致すればOK
+                            mask_a = (target_data == item_a).any(axis=1)
+                            mask_b = (target_data == item_b).any(axis=1)
+                        else:
+                            # 1列しかない場合：普通に比較
+                            mask_a = target_data == item_a
+                            mask_b = target_data == item_b
+
+                        df_a = sub_df[mask_a].copy()
+                        df_b = sub_df[mask_b].copy()
+                        # ------------------------------------------------------------------
                         stats_a = df_a[valid_scores].apply(pd.to_numeric, errors='coerce').mean()
                         stats_b = df_b[valid_scores].apply(pd.to_numeric, errors='coerce').mean()
                         fig_comp = go.Figure()
