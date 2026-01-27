@@ -132,11 +132,10 @@ def load_config_from_sheet(spreadsheet):
     for row in data:
         genre = row["ジャンル名"]
         if genre not in new_config:
-            # 枝番（.1, .2など）を自動計算するロジック
-            suffix = f".{int(row['ジャンルID']//10-1)}" if row['ジャンルID'] > 10 else ""
+            # --- ここを修正 ---
             new_config[genre] = {
-                "item_col": f"今回ご使用の商品名を入力してください。{suffix}",
-                "type_col": f"{genre.replace('商品', '').replace('（', '').replace('）', '')}を選択した方はアイテムタイプを選択してください。",
+                "item_col": "商品名",        # 長い名前や枝番を無視して「商品名」に固定
+                "type_col": "アイテムタイプ",  # 長い名前を無視して「アイテムタイプ」に固定
                 "form_id": row["フォームID"],
                 "scores": row["評価項目リスト"].split(","),
                 "types": []
