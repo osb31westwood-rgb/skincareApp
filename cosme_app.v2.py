@@ -113,9 +113,11 @@ def upload_to_imgbb(uploaded_file):
         st.error(f"エラーが発生しました: {e}")
         return None
 
-# 定数・カラーパレット
-COL_GENRE = "今回ご使用の商品のジャンルを選択してください。"
+# --- 1. 定数・カラーパレットの定義 (最初に書く！) ---
+COL_GENRE = "ジャンル"
 COL_AGE = "年齢"
+COL_GENDER = "性別"
+
 COLOR_PALETTES = {
     "ナチュラルカラー": ["#a98467", "#adc178", "#dde5b6", "#6c584c", "#f0ead2"],
     "くすみカラー": ["#8e9775", "#e28e8e", "#94a7ae", "#a79c93", "#d4a5a5"],
@@ -123,8 +125,11 @@ COLOR_PALETTES = {
     "パステルカラー": ["#ffb7b2", "#ffdac1", "#e2f0cb", "#b5ead7", "#c7ceea"],
     "ローズ系": ["#e5989b", "#ffb4a2", "#ffcdb2", "#b5838d", "#6d597a"]
 }
-# --- ここから「シート読み込み」の心臓部 ---
+
+# --- 2. 関数の定義 (読み込み処理の準備) ---
+
 def load_config_from_sheet(spreadsheet):
+    """商品構成シートから設定を読み込む"""
     sheet = spreadsheet.worksheet("商品構成")
     data = sheet.get_all_records()
     new_config = {}
@@ -132,10 +137,9 @@ def load_config_from_sheet(spreadsheet):
     for row in data:
         genre = row["ジャンル名"]
         if genre not in new_config:
-            # --- 修正：リネーム後の「短い名前」に固定 ---
             new_config[genre] = {
-                "item_col": "商品名",        # 以前の suffix ロジックを削除
-                "type_col": "アイテムタイプ",  # 固定
+                "item_col": "商品名",
+                "type_col": "アイテムタイプ",
                 "form_id": row["フォームID"],
                 "scores": [s.strip() for s in row["評価項目リスト"].split(",")],
                 "types": []
@@ -143,36 +147,16 @@ def load_config_from_sheet(spreadsheet):
         new_config[genre]["types"].append(row["アイテムタイプ"])
     return new_config
 
-# クライアント作成と読み込み
-client = get_gspread_client()
-spreadsheet = client.open("Cosme Data")
-COLUMN_CONFIG = load_config_from_sheet(spreadsheet)
-# --- ここまで ---
-
-# 2. データ読み込み
 @st.cache_data(ttl=300)
 def load_data():
+    """アンケート結果を読み込み、列名を短い名前にリネームする"""
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT5HpURwDWt6S0KkQbiS8ugZksNm8yTokNeKE4X-oBHmLMubOvOKIsuU4q6_onLta2cd0brCBQc-cHA/pub?gid=1578087772&single=true&output=csv"
     try:
         data = pd.read_csv(url)
-        data.columns = [str(c).strip() for c in data.columns]
-        return data
-    except: return None
-
-# --- データ読み込み実行 ---
-# 1. データを読み込む
-df = load_data()
-
-# 1. 読み込み関数の中を修正
-@st.cache_data(ttl=300)
-def load_data():
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT5HpURwDWt6S0KkQbiS8ugZksNm8yTokNeKE4X-oBHmLMubOvOKIsuU4q6_onLta2cd0brCBQc-cHA/pub?gid=1578087772&single=true&output=csv"
-    try:
-        data = pd.read_csv(url)
-        # 前後の空白削除
+        # 列名の前後の空白を削除
         data.columns = [str(c).strip() for c in data.columns]
         
-        # --- ここでリネームを実行 ---
+        # 長い質問文を短いIDに変換するマップ
         COL_MAP = {
             "今回ご使用の商品のジャンルを選択してください。": "ジャンル",
             "スキンケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
@@ -181,25 +165,35 @@ def load_data():
             "コスメ商品（ポイントメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
             "今回ご使用の商品名を入力してください。": "商品名",
             "ご感想やご不満点がございましたら、ご自由にご入力ください。": "感想",
-            "今回の商品は購入されましたか？": "購入状況"
+            "今回の商品は購入されましたか？": "購入状況",
+            "最近、ご自身が置かれている環境で気になることはありますか？": "環境変化",
+            "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？": "ライフスタイル",
+            "肌のお悩み（※複数選択可）": "肌悩み"
         }
 
+        # 枝番（.1, .2など）を処理してリネームを適用
         new_cols = []
         for col in data.columns:
-            # ".1"などを切り捨てた名前を作る
             base_name = col.split('.')[0].strip()
-            # 変換マップにあれば変換、なければ元の名前
             new_cols.append(COL_MAP.get(base_name, col))
         
-        # 最後に列名を「上書き」する
         data.columns = new_cols
         return data
     except Exception as e:
-        st.error(f"読み込みエラー: {e}")
+        st.error(f"データ読み込みエラー: {e}")
         return None
 
-# データ取得の実行
+# --- 3. 実際の実行プロセス ---
+
+# クライアント・スプレッドシートの準備
+client = get_gspread_client()
+spreadsheet = client.open("Cosme Data")
+
+# 定義した関数を使ってデータを読み込む
+COLUMN_CONFIG = load_config_from_sheet(spreadsheet)
 df = load_data()
+
+# この後にメニュー選択 (if menu == ...) や分析コードが続く
 # ------------------------------------------------
     
     # --- 【新設】NGワード辞書の読み込み ---
