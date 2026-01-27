@@ -178,6 +178,12 @@ def load_data():
             new_cols.append(COL_MAP.get(base_name, col))
         
         data.columns = new_cols
+         # --- ここで強制お掃除 ---
+        for c in ["商品名", "肌悩み", "アイテムタイプ", "感想"]:
+            if c in data.columns and isinstance(data[c], pd.DataFrame):
+                data[c] = data[c].bfill(axis=1).iloc[:, 0]
+        data = data.loc[:, ~data.columns.duplicated()].copy()
+        # ----------------------
         return data
     except Exception as e:
         st.error(f"データ読み込みエラー: {e}")
