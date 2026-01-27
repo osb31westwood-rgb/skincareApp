@@ -1017,3 +1017,38 @@ print(f"✨ 成功！『{SHEET_NAME}』シートに全データを引っ越し�
 print(f"✅ ジャンルIDの割り当て完了")
 print(f"✅ 『その他』を ID:99 に固定完了")
 print(f"✅ 評価項目をカンマ区切りで保存完了")
+
+# --- ここから【一時的な】引っ越しコード ---
+try:
+    st.write("🔧 スプレッドシート引っ越し処理を開始...")
+    client_temp = get_gspread_client()
+    spreadsheet_temp = client_temp.open("Cosme Data")
+    
+    # シート準備
+    try:
+        config_sheet = spreadsheet_temp.add_worksheet(title="商品構成", rows="100", cols="10")
+    except:
+        config_sheet = spreadsheet_temp.worksheet("商品構成")
+        config_sheet.clear()
+
+    # データの整形
+    GENRE_ID_MAP_TEMP = {
+        "スキンケア商品（フェイスケア・ボディケア）": 10,
+        "ヘアケア商品": 20,
+        "コスメ商品（ベースメイク）": 30,
+        "コスメ商品（ポイントメイク）": 40
+    }
+    
+    rows_to_upload = [["ジャンルID", "タイプID", "ジャンル名", "アイテムタイプ", "評価項目リスト", "フォームID"]]
+    for g_name, conf in COLUMN_CONFIG.items():
+        g_id = GENRE_ID_MAP_TEMP.get(g_name, 0)
+        for i, t_name in enumerate(conf["types"]):
+            t_id = 99 if t_name == "その他" else i + 1
+            rows_to_upload.append([g_id, t_id, g_name, t_name, ",".join(conf["scores"]), conf["form_id"]])
+
+    # 書き込み
+    config_sheet.update(f"A1:F{len(rows_to_upload)}", rows_to_upload)
+    st.success("✅ スプレッドシートの更新に成功したよ！中身を見てみて！")
+except Exception as e:
+    st.error(f"❌ 引っ越し失敗: {e}")
+# --- ここまで ---
