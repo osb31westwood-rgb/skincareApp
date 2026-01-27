@@ -474,8 +474,8 @@ elif menu == "✨ AIポップ作成":
                                 image_data = Image.open(io.BytesIO(img_res.content))
                             except:
                                 st.warning("画像の読み込みに失敗したため、テキストのみで生成します。")
-
-                        # --- プロンプトの構築 ---
+                
+                                           
                         # --- プロンプトの構築（ジャンルとタイプを追加） ---
                         # saved_recordsから現在の商品のジャンルとタイプを特定
                         current_item_data = next((row for row in saved_records if str(row.get('商品名')) == str(selected_item)), {})
