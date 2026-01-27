@@ -166,33 +166,38 @@ if df is not None:
 
 # --- 【ここに挿入】データの整形（リネーム）処理 ---
 if df is not None:
-    # 1. 新しい質問項目も含めた変換マップ
-    COL_MAP = {
-        "今回ご使用の商品のジャンルを選択してください。": "ジャンル",
-        "スキンケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "ヘアケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "コスメ商品（ベースメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "コスメ商品（ポイントメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "今回ご使用の商品名を入力してください。": "商品名",
-        "ご感想やご不満点がございましたら、ご自由にご入力ください。": "感想",
-        "今回の商品は購入されましたか？": "購入状況",
-        "最近、ご自身が置かれている環境で気になることはありますか？": "環境変化",
-        "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？": "ライフスタイル",
-        "肌のお悩み（※複数選択可）": "肌悩み"
-    }
+    # 1. 変換マップ（キーワードが含まれていればOKにする）
+# 左側はデバッグ結果から正確にコピーしたもの
+ COL_MAP = {
+    "今回ご使用の商品のジャンルを選択してください。": "ジャンル",
+    "スキンケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+    "ヘアケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+    "コスメ商品（ベースメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+    "コスメ商品（ポイントメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+    "今回ご使用の商品名を入力してください。": "商品名",
+    "ご感想やご不満点がございましたら、ご自由にご入力ください。": "感想",
+    "今回の商品は購入されましたか？": "購入状況",
+    "最近、ご自身が置かれている環境で気になることはありますか？": "環境変化",
+    "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？": "ライフスタイル",
+    "肌のお悩み（※複数選択可）": "肌悩み"
+}
 
-    # 2. 重複や枝番（.1, .2）を考慮してリネームする関数
-    def rename_columns(columns):
-        new_cols = []
-        for col in columns:
-            # 「商品名.1」などの「.1」を無視して判定
-            base_col = col.split('.')[0] if '.' in col else col
-            if col in COL_MAP: new_cols.append(COL_MAP[col])
-            elif base_col in COL_MAP: new_cols.append(COL_MAP[base_col])
-            else: new_cols.append(col)
-        return new_cols
+# 2. 枝番（.1 .2）を完全に無視してリネームする関数
+def rename_columns(columns):
+    new_cols = []
+    for col in columns:
+        # ドット以降（.1 など）を削除して、純粋な質問文にする
+        base_col = col.split('.')[0].strip() if '.' in col else col.strip()
+        
+        # マップに存在すれば変換、なければそのまま
+        if base_col in COL_MAP:
+            new_cols.append(COL_MAP[base_col])
+        else:
+            new_cols.append(col)
+    return new_cols
 
-    df.columns = rename_columns(df.columns)
+# 3. 適用
+df.columns = rename_columns(df.columns)
 # ------------------------------------------------
     
     # --- 【新設】NGワード辞書の読み込み ---
@@ -269,13 +274,21 @@ with st.sidebar:
         genders = ["女性", "男性", "回答しない／その他"]
         selected_genders = st.multiselect("性別", genders, default=genders)
 
-           # フィルタ適用
-        sub_df = sub_df[
-            (sub_df[COL_AGE].isin(selected_ages)) & 
-            (sub_df[conf["type_col"]].isin(selected_types)) &
-            (sub_df["性別"].isin(selected_genders))
-           ]
-           # 条件を一つずつ & (かつ) でつなげます
+          # --- フィルタ適用（1つずつ順番に絞り込む） ---
+
+# 1. 年齢で絞り込む
+if selected_ages:
+    sub_df = sub_df[sub_df[COL_AGE].isin(selected_ages)]
+
+# 2. アイテムタイプで絞り込む（列が存在し、かつ選択されている場合のみ）
+type_col = "アイテムタイプ"
+if type_col in sub_df.columns:
+    if selected_types:
+        sub_df = sub_df[sub_df[type_col].isin(selected_types)]
+
+# 3. 性別で絞り込む
+if selected_genders:
+    sub_df = sub_df[sub_df["性別"].isin(selected_genders)]
 
 
     # --- 各メニュー機能 ---
