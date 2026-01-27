@@ -192,6 +192,22 @@ spreadsheet = client.open("Cosme Data")
 # 定義した関数を使ってデータを読み込む
 COLUMN_CONFIG = load_config_from_sheet(spreadsheet)
 df = load_data()
+# --- 【修正後】ここにお掃除コードを入れる ---
+if df is not None:
+    # 統合したい列名のリスト
+    cols_to_fix = ["商品名", "肌悩み", "アイテムタイプ", "感想"]
+
+    for col_name in cols_to_fix:
+        if col_name in df.columns:
+            target_cols = df[col_name]
+            # 同じ名前の列が複数（DataFrame）ある場合のみ処理
+            if isinstance(target_cols, pd.DataFrame):
+                # 横方向に見て空欄を埋め、1本にまとめる
+                df[col_name] = target_cols.bfill(axis=1).iloc[:, 0]
+    
+    # まとめた後、重複した古い列を削除して「1つだけ」残す
+    df = df.loc[:, ~df.columns.duplicated()].copy()
+# ----------------------------------------------
 
 # この後にメニュー選択 (if menu == ...) や分析コードが続く
 # ------------------------------------------------
