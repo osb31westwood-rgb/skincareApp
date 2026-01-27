@@ -381,7 +381,17 @@ elif menu == "✨ AIポップ作成":
         # 2. 商品データの取得（真っ白回避）
         survey_items = set()
         if not sub_df.empty and conf["item_col"] in sub_df.columns:
-            survey_items = set(sub_df[conf["item_col"]].dropna().unique())
+            # --- 384行目付近の修正 ---
+            item_col_name = conf["item_col"]
+            target_item_data = sub_df[item_col_name]
+
+            if isinstance(target_item_data, pd.DataFrame):
+               # 複数列（商品名が5つなど）ある場合、すべてを1列にまとめてからユニーク値を取る
+               survey_items = set(target_item_data.stack().dropna().unique())
+            else:
+                # 1列だけの場合
+                survey_items = set(target_item_data.dropna().unique())
+                # -------------------------
 
         saved_records = []
         saved_items = set()
