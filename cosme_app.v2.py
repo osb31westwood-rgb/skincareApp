@@ -942,7 +942,21 @@ elif menu == "📈 アンケート分析":
                         f_items = st.multiselect("特定の商品", sorted(combined_items.dropna().unique()))
                         f_word = st.text_input("検索", key="v_f_word")
                     with c2:
-                        f_skin = st.multiselect("肌悩み", sorted(voice_base_df["肌悩み"].dropna().unique()) if "肌悩み" in voice_base_df.columns else [], key="v_f_skin")
+                        # --- 945行目付近の修正 ---
+                        skin_col_name = "肌悩み" # もし変数を使っているならそれに合わせてください
+
+                        if skin_col_name in voice_base_df.columns:
+                            target_skin = voice_base_df[skin_col_name]
+    
+                            # 複数列あっても1列にまとめてからユニーク値を取得
+                            if isinstance(target_skin, pd.DataFrame):
+                                combined_skin = target_skin.stack()
+                            else:
+                                combined_skin = target_skin
+        
+                            f_skin = st.multiselect("肌悩み", sorted(combined_skin.dropna().unique()))
+                        else:
+                            f_skin = st.multiselect("肌悩み", [])
                 f_df = voice_base_df.copy()
                 if f_items: f_df = f_df[f_df[item_col_name].isin(f_items)]
                 if f_word: f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
