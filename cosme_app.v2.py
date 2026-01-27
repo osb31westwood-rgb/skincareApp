@@ -968,7 +968,18 @@ elif menu == "📈 アンケート分析":
             # --- Tab 4: 商品比較分析 ---
             with tab4:
                 st.subheader("⚔️ 商品比較")
-                target_items = sorted(sub_df[conf["item_col"]].dropna().unique())
+                # --- 971行目の修正：商品比較用のリスト作成 ---
+                item_col_name = conf["item_col"]
+                raw_target = sub_df[item_col_name]
+
+                 # 複数列あっても1つにまとめてからユニーク値を取得
+                if isinstance(raw_target, pd.DataFrame):
+                    combined_raw = raw_target.stack()
+                else:
+                    combined_raw = raw_target
+
+                target_items = sorted(combined_raw.dropna().unique())
+# ------------------------------------------
                 if len(target_items) >= 2:
                     col1, col2 = st.columns(2)
                     with col1: item_a = st.selectbox("商品A", target_items, key="comp_a")
