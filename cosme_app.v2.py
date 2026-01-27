@@ -912,9 +912,19 @@ elif menu == "📈 アンケート分析":
             # --- Tab 3: 生の声分析 ---
             with tab3:
                 st.subheader("🗣️ 生の声")
-                feedback_col = "ご感想やご不満点がございましたら、ご自由にご入力ください。"
+                feedback_col = "感想" # リネーム後の名前に合わせる
                 item_col_name = conf["item_col"]
-                voice_base_df = sub_df[sub_df[feedback_col].fillna("").str.strip() != ""]
+                if feedback_col in sub_df.columns:
+                    target_feedback = sub_df[feedback_col]
+                    # もし複数列ある場合は、どれか1つでも入力があれば残す
+                    if isinstance(target_feedback, pd.DataFrame):
+                        mask = target_feedback.fillna("").ne("").any(axis=1)
+                    else:
+                        mask = target_feedback.fillna("") != ""
+    
+                    voice_base_df = sub_df[mask].copy()
+                else:
+                    voice_base_df = pd.DataFrame() # 列がなければ空のデータ
                 with st.expander("🛠️ フィルタ", expanded=True):
                     c1, c2 = st.columns(2)
                     with c1:
