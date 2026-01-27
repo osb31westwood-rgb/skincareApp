@@ -484,7 +484,20 @@ elif menu == "✨ AIポップ作成":
 
             # --- 2. データの絞り込みロジック ---
             # 選択した商品で絞り込み
-            item_all_data = sub_df[sub_df[conf["item_col"]] == selected_item]
+            # --- 487行目の修正：商品詳細データの抽出 ---
+            item_col = conf["item_col"]
+            target_item_col = sub_df[item_col]
+
+            # 複数列（商品名）のどこかに、選択された商品名がある行を探す
+            if isinstance(target_item_col, pd.DataFrame):
+               # 横方向に見て、どれか1列でも一致すればTrueにする
+               mask = (target_item_col == selected_item).any(axis=1)
+            else:
+                # 1列しかな\い場合は普通に比較
+                mask = (target_item_col == selected_item)
+
+            item_all_data = sub_df[mask].copy()
+            # ----------------------------------------
             
             # 性別でさらに絞り込み
             if gender_target != "全て":
