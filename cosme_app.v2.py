@@ -159,6 +159,41 @@ def load_data():
         data.columns = [str(c).strip() for c in data.columns]
         return data
     except: return None
+
+# --- データ読み込み実行 ---
+df = load_data()
+
+# --- 【ここに挿入】データの整形（リネーム）処理 ---
+if df is not None:
+    # 1. 新しい質問項目も含めた変換マップ
+    COL_MAP = {
+        "今回ご使用の商品のジャンルを選択してください。": "ジャンル",
+        "スキンケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+        "ヘアケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+        "コスメ商品（ベースメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+        "コスメ商品（ポイントメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+        "今回ご使用の商品名を入力してください。": "商品名",
+        "ご感想やご不満点がございましたら、ご自由にご入力ください。": "感想",
+        "今回の商品は購入されましたか？": "購入状況",
+        "最近、ご自身が置かれている環境で気になることはありますか？": "環境変化",
+        "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？": "ライフスタイル",
+        "肌のお悩み（※複数選択可）": "肌悩み"
+    }
+
+    # 2. 重複や枝番（.1, .2）を考慮してリネームする関数
+    def rename_columns(columns):
+        new_cols = []
+        for col in columns:
+            # 「商品名.1」などの「.1」を無視して判定
+            base_col = col.split('.')[0] if '.' in col else col
+            if col in COL_MAP: new_cols.append(COL_MAP[col])
+            elif base_col in COL_MAP: new_cols.append(COL_MAP[base_col])
+            else: new_cols.append(col)
+        return new_cols
+
+    df.columns = rename_columns(df.columns)
+# ------------------------------------------------
+    
     # --- 【新設】NGワード辞書の読み込み ---
 @st.cache_data(ttl=300)
 def load_ng_words():
