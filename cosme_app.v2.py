@@ -533,284 +533,102 @@ elif menu == "✨ AIポップ作成":
                 else: st.warning("先に「商品カルテ編集」からこの商品を登録してください。")
 
 elif menu == "📋 商品カルテ編集":
-        st.header("📋 商品カルテ：編集・管理")
+    st.header("📋 商品カルテ：編集・管理")
 
-        # 1. まずはスプレッドシートから「既存のカルテ」を読み込む（これが先！）
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data")
-            sheet_karte = sh.worksheet("カルテ")
-            records = sheet_karte.get_all_records()
-            df_karte = pd.DataFrame(records) if records else pd.DataFrame()
+    try:
+        client = get_gspread_client()
+        sh = client.open("Cosme Data")
+        sheet_karte = sh.worksheet("カルテ")
+        records = sheet_karte.get_all_records()
+        df_karte = pd.DataFrame(records) if records else pd.DataFrame()
 
-            mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
+        mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
 
-            # 2. 変数を空で初期化しておく（これで "Undefined" エラーが消える！）
-            target_item_name, official_info_val, memo_val, author_val, current_img_url = "", "", "", "", ""
-            base_date, current_gen, current_type = "", "", ""
+        # 初期値のリセット
+        target_item_name, official_info_val, memo_val, author_val, current_img_url = "", "", "", "", ""
+        base_date, current_gen, current_type = "", "", ""
 
-            # 3. 既存編集なら、中身をスプレッドシートの値で上書きする
-            if mode == "既存データから選んで編集" and not df_karte.empty:
-                item_list = [n for n in df_karte["商品名"].unique() if n]
-                selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
-                latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
-                
-                target_item_name = selected_name
-                current_gen = latest_row.get("ジャンル", "")
-                current_type = latest_row.get("アイテムタイプ", "")
-                # ...（他の値も同様に取得）
-
-            st.markdown("---")
-            st.markdown("### 📝 カルテ入力")
+        if mode == "既存データから選んで編集" and not df_karte.empty:
+            item_list = [n for n in df_karte["商品名"].unique() if n]
+            selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
+            latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
             
-            # 4. 【ここで COLUMN_CONFIG を使う！】
-            genres = list(COLUMN_CONFIG.keys())
-            
-            col_info1, col_info2, col_info3 = st.columns([2, 2, 1])
-            with col_info1:
-                # current_gen が上で定義されてるから、もうエラーにならない！
-                gen_idx = genres.index(current_gen) if current_gen in genres else 0
-                main_cat = st.selectbox("✨ ジャンル", genres, index=gen_idx)
-                
-            with col_info2:
-                # main_cat に基づいてタイプを取得
-                types = COLUMN_CONFIG[main_cat]["types"] if main_cat in COLUMN_CONFIG else []
-                type_idx = types.index(current_type) if current_type in types else 0
-                sub_cat = st.selectbox("🏷️ アイテムタイプ", types, index=type_idx)
+            target_item_name = selected_name
+            official_info_val = latest_row.get("公式情報", "")
+            memo_val = latest_row.get("メモ", "")
+            author_val = latest_row.get("作成者", "")
+            base_date = latest_row.get("新規", "")
+            current_img_url = latest_row.get("画像URL", "")
+            current_gen = latest_row.get("ジャンル", "")
+            current_type = latest_row.get("アイテムタイプ", "")
 
-            # ...（あとの入力フォームはそのまま！）
-        except Exception as e:
-            st.error(f"システムエラーが発生しました: {e}")
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data")
-            sheet_karte = sh.worksheet("カルテ")
-            records = sheet_karte.get_all_records()
-            df_karte = pd.DataFrame(records) if records else pd.DataFrame()
+        st.markdown("---")
+        st.markdown("### 📝 カルテ入力")
+        
+        col_info1, col_info2, col_info3 = st.columns([2, 2, 1])
+        with col_info1:
+            gen_idx = list(COLUMN_CONFIG.keys()).index(current_gen) if current_gen in COLUMN_CONFIG else 0
+            main_cat = st.selectbox("✨ ジャンル", list(COLUMN_CONFIG.keys()), index=gen_idx)
+        with col_info2:
+            types = COLUMN_CONFIG[main_cat]["types"]
+            type_idx = types.index(current_type) if current_type in types else 0
+            sub_cat = st.selectbox("🏷️ アイテムタイプ", types, index=type_idx)
+        with col_info3:
+            edit_author = st.text_input("✍️ 作成者", value=author_val)
 
-            mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
+        edit_item_name = st.text_input("🎁 商品名", value=target_item_name)
 
-            # 初期値のリセット
-            target_item_name, official_info_val, memo_val, author_val, current_img_url = "", "", "", "", ""
-            base_date, current_gen, current_type = "", "", ""
+        col_text1, col_text2 = st.columns(2)
+        with col_text1:
+            edit_official_info = st.text_area("📖 公式情報（特徴・成分など）", value=official_info_val, height=150)
+        with col_text2:
+            edit_memo = st.text_area("💡 スタッフメモ・備考", value=memo_val, height=150)
 
-            if mode == "既存データから選んで編集" and not df_karte.empty:
-                item_list = [n for n in df_karte["商品名"].unique() if n]
-                selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
-                latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
-                
-                target_item_name = selected_name
-                official_info_val = latest_row.get("公式情報", "")
-                memo_val = latest_row.get("メモ", "")
-                author_val = latest_row.get("作成者", "")
-                base_date = latest_row.get("新規", "")
-                current_img_url = latest_row.get("画像URL", "")
-                current_gen = latest_row.get("ジャンル", "")
-                current_type = latest_row.get("アイテムタイプ", "")
+        st.subheader("📸 商品画像")
+        delete_image = False
+        if current_img_url:
+            st.image(current_img_url, caption="現在登録されている画像", width=200)
+            delete_image = st.checkbox("🗑️ この画像を削除する")
+        
+        uploaded_file = st.file_uploader("新しい画像を選択（上書き）", type=["jpg", "jpeg", "png"])
 
-            st.markdown("---")
-            st.markdown("### 📝 カルテ入力")
-            
-            # --- 入力エリア ---
-            col_info1, col_info2, col_info3 = st.columns([2, 2, 1])
-            with col_info1:
-                # 既存データがある場合はCOLUMN_CONFIGその値を初期値にする
-                gen_idx = list(COLUMN_CONFIG.keys()).index(current_gen) if current_gen in COLUMN_CONFIG else 0
-                main_cat = st.selectbox("✨ ジャンル", list(COLUMN_CONFIG.keys()), index=gen_idx)
-            with col_info2:
-                types = COLUMN_CONFIG[main_cat]["types"]
-                type_idx = types.index(current_type) if current_type in types else 0
-                sub_cat = st.selectbox("🏷️ アイテムタイプ", types, index=type_idx)
-            with col_info3:
-                edit_author = st.text_input("✍️ 作成者", value=author_val)
+        if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
+            if not edit_item_name:
+                st.error("商品名を入力してください。")
+            else:
+                with st.spinner("データを保存中..."):
+                    now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
+                    now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
+                    final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
 
-            edit_item_name = st.text_input("🎁 商品名", value=target_item_name)
+                    if delete_image:
+                        new_image_url = ""
+                    elif uploaded_file:
+                        res_url = upload_to_imgbb(uploaded_file)
+                        new_image_url = res_url if res_url else current_img_url
+                    else:
+                        new_image_url = current_img_url
 
-            col_text1, col_text2 = st.columns(2)
-            with col_text1:
-                edit_official_info = st.text_area("📖 公式情報（特徴・成分など）", value=official_info_val, height=150)
-            with col_text2:
-                edit_memo = st.text_area("💡 スタッフメモ・備考", value=memo_val, height=150)
+                    new_row = [
+                        final_base_date, now_str, edit_author, main_cat, sub_cat, 
+                        edit_item_name, "", edit_official_info, "", edit_memo, new_image_url
+                    ]
 
-            # --- 画像エリア ---
-            st.subheader("📸 商品画像")
-            delete_image = False
-            if current_img_url:
-                st.image(current_img_url, caption="現在登録されている画像", width=200)
-                delete_image = st.checkbox("🗑️ この画像を削除する")
-            
-            uploaded_file = st.file_uploader("新しい画像を選択（上書き）", type=["jpg", "jpeg", "png"])
+                    # 更新または新規追加のロジック
+                    if not df_karte.empty and edit_item_name in df_karte["商品名"].values:
+                        row_index = df_karte[df_karte["商品名"] == edit_item_name].index[0] + 2
+                        sheet_karte.update(range_name=f"A{row_index}:K{row_index}", values=[new_row])
+                        st.success(f"「{edit_item_name}」を更新しました！")
+                    else:
+                        sheet_karte.append_row(new_row)
+                        st.success(f"「{edit_item_name}」を新規登録しました！")
 
-            # --- 保存ボタン ---
-            if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
-                if not edit_item_name:
-                    st.error("商品名を入力してください。")
-                else:
-                    with st.spinner("データを保存中..."):
-                        # 時間設定
-                        now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
-                        now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
-                        final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
+                    st.balloons()
+                    st.rerun()
 
-                        # 画像URL決定
-                        if delete_image:
-                            new_image_url = ""
-                        elif uploaded_file:
-                            res_url = upload_to_imgbb(uploaded_file)
-                            new_image_url = res_url if res_url else current_img_url
-                        else:
-                            new_image_url = current_img_url
-
-                        # 保存データ A～K列
-                        new_row = [
-                            final_base_date,    # A: 新規
-                            now_str,            # B: 更新
-                            edit_author,        # C: 作成者
-                            main_cat,           # D: ジャンル
-                            sub_cat,            # E: アイテムタイプ
-                            edit_item_name,     # F: 商品名
-                            "",                 # G: AIコピー
-                            edit_official_info, # H: 公式情報
-                            "",                 # I: ポップ案
-                            edit_memo,          # J: メモ
-                            new_image_url       # K: 画像URL
-                        ]
-
-                        # スプレッドシート更新
-                        all_records = sheet_karte.get_all_records()
-                        df_all = pd.DataFrame(all_records)
-                        
-                        if not df_all.empty and edit_item_name in df_all["商品名"].values:
-                            row_index = df_all[df_all["商品名"] == edit_item_name].index[0] + 2
-                            # A列(新規日)を維持
-                            new_row[0] = str(df_all.loc[df_all["商品名"] == edit_item_name, "新規"].values[0])
-                            sheet_karte.update(range_name=f"A{row_index}:K{row_index}", values=[new_row])
-                            st.success(f"「{edit_item_name}」を更新しました！")
-                        else:
-                            sheet_karte.append_row(new_row)
-                            st.success(f"「{edit_item_name}」を新規登録しました！")
-
-                        st.balloons()
-                        st.rerun()
-
-        except Exception as e:
-            st.error(f"システムエラーが発生しました: {e}")
-
-        try:
-            client = get_gspread_client()
-            sh = client.open("Cosme Data")
-            sheet_karte = sh.worksheet("カルテ")
-            records = sheet_karte.get_all_records()
-            df_karte = pd.DataFrame(records) if records else pd.DataFrame()
-
-            mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
-
-            # 初期値のリセット
-            target_item_name, official_info_val, memo_val, author_val, current_img_url = "", "", "", "", ""
-            base_date, current_gen, current_type = "", "", ""
-
-            if mode == "既存データから選んで編集" and not df_karte.empty:
-                item_list = [n for n in df_karte["商品名"].unique() if n]
-                selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
-                latest_row = df_karte[df_karte["商品名"] == selected_name].iloc[-1]
-                
-                target_item_name = selected_name
-                official_info_val = latest_row.get("公式情報", "")
-                memo_val = latest_row.get("メモ", "")
-                author_val = latest_row.get("作成者", "")
-                base_date = latest_row.get("新規", "")
-                current_img_url = latest_row.get("画像URL", "")
-                current_gen = latest_row.get("ジャンル", "")
-                current_type = latest_row.get("アイテムタイプ", "")
-
-            st.markdown("---")
-            st.markdown("### 📝 カルテ入力")
-            
-            # --- 入力エリア ---
-            col_info1, col_info2, col_info3 = st.columns([2, 2, 1])
-            with col_info1:
-                # 既存データがある場合はその値を初期値にする
-                gen_idx = list(COLUMN_CONFIG.keys()).index(current_gen) if current_gen in COLUMN_CONFIG else 0
-                main_cat = st.selectbox("✨ ジャンル", list(COLUMN_CONFIG.keys()), index=gen_idx)
-            with col_info2:
-                types = COLUMN_CONFIG[main_cat]["types"]
-                type_idx = types.index(current_type) if current_type in types else 0
-                sub_cat = st.selectbox("🏷️ アイテムタイプ", types, index=type_idx)
-            with col_info3:
-                edit_author = st.text_input("✍️ 作成者", value=author_val)
-
-            edit_item_name = st.text_input("🎁 商品名", value=target_item_name)
-
-            col_text1, col_text2 = st.columns(2)
-            with col_text1:
-                edit_official_info = st.text_area("📖 公式情報（特徴・成分など）", value=official_info_val, height=150)
-            with col_text2:
-                edit_memo = st.text_area("💡 スタッフメモ・備考", value=memo_val, height=150)
-
-            # --- 画像エリア ---
-            st.subheader("📸 商品画像")
-            delete_image = False
-            if current_img_url:
-                st.image(current_img_url, caption="現在登録されている画像", width=200)
-                delete_image = st.checkbox("🗑️ この画像を削除する")
-            
-            uploaded_file = st.file_uploader("新しい画像を選択（上書き）", type=["jpg", "jpeg", "png"])
-
-            # --- 保存ボタン ---
-            if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
-                if not edit_item_name:
-                    st.error("商品名を入力してください。")
-                else:
-                    with st.spinner("データを保存中..."):
-                        # 時間設定
-                        now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
-                        now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
-                        final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
-
-                        # 画像URL決定
-                        if delete_image:
-                            new_image_url = ""
-                        elif uploaded_file:
-                            res_url = upload_to_imgbb(uploaded_file)
-                            new_image_url = res_url if res_url else current_img_url
-                        else:
-                            new_image_url = current_img_url
-
-                        # 保存データ A～K列
-                        new_row = [
-                            final_base_date,    # A: 新規
-                            now_str,            # B: 更新
-                            edit_author,        # C: 作成者
-                            main_cat,           # D: ジャンル
-                            sub_cat,            # E: アイテムタイプ
-                            edit_item_name,     # F: 商品名
-                            "",                 # G: AIコピー
-                            edit_official_info, # H: 公式情報
-                            "",                 # I: ポップ案
-                            edit_memo,          # J: メモ
-                            new_image_url       # K: 画像URL
-                        ]
-
-                        # スプレッドシート更新
-                        all_records = sheet_karte.get_all_records()
-                        df_all = pd.DataFrame(all_records)
-                        
-                        if not df_all.empty and edit_item_name in df_all["商品名"].values:
-                            row_index = df_all[df_all["商品名"] == edit_item_name].index[0] + 2
-                            # A列(新規日)を維持
-                            new_row[0] = str(df_all.loc[df_all["商品名"] == edit_item_name, "新規"].values[0])
-                            sheet_karte.update(range_name=f"A{row_index}:K{row_index}", values=[new_row])
-                            st.success(f"「{edit_item_name}」を更新しました！")
-                        else:
-                            sheet_karte.append_row(new_row)
-                            st.success(f"「{edit_item_name}」を新規登録しました！")
-
-                        st.balloons()
-                        st.rerun()
-
-        except Exception as e:
-            st.error(f"システムエラーが発生しました: {e}")
-
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
+        
 elif menu == "📚 商品カルテ一覧":
         st.header("📋 登録済み商品カルテ一覧")
         try:
