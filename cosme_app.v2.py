@@ -161,6 +161,8 @@ def load_data():
 
 # --- データ読み込み実行 ---
 df = load_data()
+if df is not None:
+    st.write("【デバッグ】現在の列名一覧:", df.columns.tolist()) # これを一時的に追加
 
 # --- 【ここに挿入】データの整形（リネーム）処理 ---
 if df is not None:
@@ -251,17 +253,24 @@ with st.sidebar:
             # フィルター適用のロジックをここに全部書く
            sub_df = df[df[COL_GENRE] == genre].copy()
         
-           types = sorted(sub_df[conf["type_col"]].dropna().unique())
-           selected_types = st.multiselect("アイテムタイプ", types, default=types)
+           # 254行目付近の修正
+           type_col_name = conf.get("type_col", "アイテムタイプ")
+
+           if type_col_name in sub_df.columns:
+               types = sorted(sub_df[type_col_name].dropna().unique())
+               selected_types = st.multiselect("アイテムタイプ", types)
+           else:
+               st.warning(f"⚠️ 列 '{type_col_name}' がデータに見つかりません。")
+               st.write("現在の列名:", sub_df.columns.tolist()) # 何が原因か画面で確認できる
+               selected_types = []
+        ages = sorted(sub_df[COL_AGE].unique())
+        selected_ages = st.multiselect("年代", ages, default=ages)
         
-           ages = sorted(sub_df[COL_AGE].unique())
-           selected_ages = st.multiselect("年代", ages, default=ages)
-        
-           genders = ["女性", "男性", "回答しない／その他"]
-           selected_genders = st.multiselect("性別", genders, default=genders)
+        genders = ["女性", "男性", "回答しない／その他"]
+        selected_genders = st.multiselect("性別", genders, default=genders)
 
            # フィルタ適用
-           sub_df = sub_df[
+        sub_df = sub_df[
             (sub_df[COL_AGE].isin(selected_ages)) & 
             (sub_df[conf["type_col"]].isin(selected_types)) &
             (sub_df["性別"].isin(selected_genders))
