@@ -132,12 +132,12 @@ def load_config_from_sheet(spreadsheet):
     for row in data:
         genre = row["ジャンル名"]
         if genre not in new_config:
-            # --- ここを修正 ---
+            # --- 修正：リネーム後の「短い名前」に固定 ---
             new_config[genre] = {
-                "item_col": "商品名",        # 長い名前や枝番を無視して「商品名」に固定
-                "type_col": "アイテムタイプ",  # 長い名前を無視して「アイテムタイプ」に固定
+                "item_col": "商品名",        # 以前の suffix ロジックを削除
+                "type_col": "アイテムタイプ",  # 固定
                 "form_id": row["フォームID"],
-                "scores": row["評価項目リスト"].split(","),
+                "scores": [s.strip() for s in row["評価項目リスト"].split(",")],
                 "types": []
             }
         new_config[genre]["types"].append(row["アイテムタイプ"])
@@ -163,35 +163,43 @@ def load_data():
 # 1. データを読み込む
 df = load_data()
 
-# --- ここからリネーム処理を確実に実行する ---
-if df is not None:
-    # 変換表
-    COL_MAP = {
-        "今回ご使用の商品のジャンルを選択してください。": "ジャンル",
-        "スキンケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "ヘアケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "コスメ商品（ベースメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "コスメ商品（ポイントメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
-        "今回ご使用の商品名を入力してください。": "商品名",
-        "性別": "性別",
-        "年齢": "年齢",
-        "ご感想やご不満点がございましたら、ご自由にご入力ください。": "感想",
-        "今回の商品は購入されましたか？": "購入状況"
-    }
+# 1. 読み込み関数の中を修正
+@st.cache_data(ttl=300)
+def load_data():
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT5HpURwDWt6S0KkQbiS8ugZksNm8yTokNeKE4X-oBHmLMubOvOKIsuU4q6_onLta2cd0brCBQc-cHA/pub?gid=1578087772&single=true&output=csv"
+    try:
+        data = pd.read_csv(url)
+        # 前後の空白削除
+        data.columns = [str(c).strip() for c in data.columns]
+        
+        # --- ここでリネームを実行 ---
+        COL_MAP = {
+            "今回ご使用の商品のジャンルを選択してください。": "ジャンル",
+            "スキンケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+            "ヘアケア商品を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+            "コスメ商品（ベースメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+            "コスメ商品（ポイントメイク）を選択した方はアイテムタイプを選択してください。": "アイテムタイプ",
+            "今回ご使用の商品名を入力してください。": "商品名",
+            "ご感想やご不満点がございましたら、ご自由にご入力ください。": "感想",
+            "今回の商品は購入されましたか？": "購入状況"
+        }
 
-    # 枝番（.1 .2）を消してリネームする関数を定義
-    def fix_columns(columns):
         new_cols = []
-        for col in columns:
-            # ".1" などを切り捨てる
-            base = col.split('.')[0].strip()
-            # 変換表にあれば変換、なければそのまま
-            new_cols.append(COL_MAP.get(base, col))
-        return new_cols
+        for col in data.columns:
+            # ".1"などを切り捨てた名前を作る
+            base_name = col.split('.')[0].strip()
+            # 変換マップにあれば変換、なければ元の名前
+            new_cols.append(COL_MAP.get(base_name, col))
+        
+        # 最後に列名を「上書き」する
+        data.columns = new_cols
+        return data
+    except Exception as e:
+        st.error(f"読み込みエラー: {e}")
+        return None
 
-    # ★重要：ここで実際に列名を上書きする
-    df.columns = fix_columns(df.columns)
-# --- ここまで ---
+# データ取得の実行
+df = load_data()
 # ------------------------------------------------
     
     # --- 【新設】NGワード辞書の読み込み ---
