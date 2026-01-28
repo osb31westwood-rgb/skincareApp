@@ -874,14 +874,14 @@ elif menu == "🧪 成分マスタ編集":
         records = sheet_master.get_all_records()
         df_master = pd.DataFrame(records)
 
-        # 設定する項目のリスト
+        # 設定項目の定義
         trouble_list = ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]
         env_list = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
         l_key = "ストレス・睡眠・食生活"
 
-        # --- フォーム開始 ---
-        with st.form("master_edit_form"):
-            master_data = []
+        # --- ここからフォーム開始 ---
+        with st.form(key="master_management_form"):
+            master_data = [] # データを一時保存するリスト
             
             st.subheader("🎯 肌悩み別の設定")
             for t in trouble_list:
@@ -904,7 +904,7 @@ elif menu == "🧪 成分マスタ編集":
                     phrase = st.text_input(f"【{e}】のフレーズ", value=row.get("フレーズ", ""), key=f"ph_{e}")
                 master_data.append(["環境", e, ing, phrase])
 
-            st.info(f"💡 {l_key} の設定")
+            st.info(f"💡 {l_key} の設定（一括り項目）")
             col1, col2 = st.columns([1, 2])
             row_l = df_master[df_master["キーワード"] == l_key].iloc[0] if not df_master.empty and l_key in df_master["キーワード"].values else {}
             with col1:
@@ -913,10 +913,10 @@ elif menu == "🧪 成分マスタ編集":
                 phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活の乱れから肌を守る"), key="ph_lifestyle_all")
             master_data.append(["ライフスタイル", l_key, ing_l, phrase_l])
 
-            # ★【重要】このボタンが with st.form の中（インデント内）にある必要があります！
-            submitted = st.form_submit_button("✅ マスタ内容を保存する")
+            # ★【最重要】ここが「with st.form」のインデント（右空白）の終わりの位置です
+            submitted = st.form_submit_button("✅ この内容でマスタを保存する")
 
-        # --- フォーム終了（ここから保存処理） ---
+        # --- ここからフォームの外（保存処理） ---
         if submitted:
             with st.spinner("スプレッドシートを更新中..."):
                 now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
@@ -927,10 +927,10 @@ elif menu == "🧪 成分マスタ編集":
                 
                 sheet_master.clear()
                 sheet_master.update("A1", final_rows)
-                st.success("成分マスタを更新しました！これで自動レコメンドが正しく動きます。")
+                st.success("成分マスタを更新しました！スプレッドシートを確認してください。")
 
     except Exception as e:
-        st.error(f"エラーが発生しました: {e}")
+        st.error(f"システムエラーが発生しました: {e}")
 
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
