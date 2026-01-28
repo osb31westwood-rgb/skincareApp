@@ -245,7 +245,7 @@ with st.sidebar:
             "✨ AIポップ作成", 
             "📋 商品カルテ編集", 
             "📚 商品カルテ一覧", 
-            "🧪 成分マスタ管理",
+            "🧪 成分マスタ編集",
             "📈 アンケート分析"
         ],
         icons=["qr-code-scan", "magic", "pencil-square", "collection", "bar-chart-line", "graph-up"],
@@ -856,30 +856,76 @@ elif menu == "📚 商品カルテ一覧":
         except Exception as e:
             st.error(f"表示エラー: {e}")
 
-elif menu == "🧪 成分マスタ管理":
-    st.header("🧪 パーソナライズ成分マスタ")
-    
-    # --- セクション1：肌悩み (アンケート項目) ---
-    with st.expander("🎯 肌悩み別の推奨成分", expanded=True):
+elif menu == "🧪 成分マスタ編集":
+    st.header("🧪 成分・悩みマスタ編集")
+    st.caption("ここで設定した成分とフレーズが、アンケート分析時の『おすすめ理由』として自動表示されます。")
+
+    try:
+        client = get_gspread_client()
+        sh = client.open("Cosme Data")
+        
+        # マスタ用シートの取得（なければ作成）
+        try:
+            sheet_master = sh.worksheet("ingredient_master")
+        except:
+            sheet_master = sh.add_worksheet(title="ingredient_master", rows="100", cols="10")
+            sheet_master.append_row(["分類", "キーワード", "推奨成分", "フレーズ", "更新日"])
+
+        records = sheet_master.get_all_records()
+        df_master = pd.DataFrame(records)
+
+        # --- 設定データ準備 ---
         trouble_list = ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]
-        for t in trouble_list:
-            st.text_input(f"【{t}】の成分", key=f"mst_t_{t}", help="カンマ区切りで入力")
+        env_list = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
+        life_list = ["ストレス・睡眠・食生活"]
 
-    # --- セクション2：環境・ライフスタイル (6段階評価項目) ---
-    with st.expander("🌍 環境・生活習慣の対策成分"):
-        life_list = ["乾燥", "日差し・紫外線", "摩擦", "ストレス", "睡眠不足", "食生活"]
-        for l in life_list:
-            st.text_input(f"【{l}】対策の成分", key=f"mst_l_{l}")
-
-    # --- セクション3：トレンド成分 ---
-    with st.expander("🔥 今月の話題・トレンド"):
-        st.text_area("注目の成分名", key="mst_trending", placeholder="エクソソーム, グルタチオン...")
-        st.date_input("トレンド有効期限", key="mst_trend_date")
-
-    if st.button("マスタを更新して保存"):
-        # ここでスプレッドシートへの保存処理を呼ぶ
-        st.success("成分マスタを更新しました！これでお客様の生活環境に合わせた提案が可能になります。")            
+        with st.form("master_edit_form"):
+            st.subheader("🎯 肌悩み別の設定")
+            master_data = []
             
+            for t in trouble_list:
+                col1, col2 = st.columns([1, 2])
+                # 既存データの取得
+                row = df_master[df_master["キーワード"] == t].iloc[0] if not df_master.empty and t in df_master["キーワード"].values else {}
+                with col1:
+                    ing = st.text_input(f"【{t}】の成分", value=row.get("推奨成分", ""), key=f"ing_{t}")
+                with col2:
+                    phrase = st.text_input(f"【{t}】のフレーズ", value=row.get("フレーズ", ""), key=f"ph_{t}")
+                master_data.append(["悩み", t, ing, phrase])
+
+            st.divider()
+            st.subheader("🌍 環境・ライフスタイルの設定")
+            # 1. まずは「環境」の4項目をループで表示
+            for e in env_list:
+                col1, col2 = st.columns([1, 2])
+                row = df_master[df_master["キーワード"] == e].iloc[0] if not df_master.empty and e in df_master["キーワード"].values else {}
+                with col1:
+                    ing = st.text_input(f"【{e}】の成分", value=row.get("推奨成分", ""), key=f"ing_{e}")
+                with col2:
+                    phrase = st.text_input(f"【{e}】のフレーズ", value=row.get("フレーズ", ""), key=f"ph_{e}")
+                master_data.append(["環境", e, ing, phrase])
+
+            st.markdown("---") # ちょっと区切りを入れると見やすいです
+            
+            # 2. ここに「ライフスタイル（一括り）」の設定を入れる！
+            st.info("💡 以下の設定は、ストレス・睡眠・食生活の合計スコアが高い人に適用されます。")
+            
+            l_key = "ストレス・睡眠・食生活"
+            col1, col2 = st.columns([1, 2])
+            # 既存データの取得
+            row_l = df_master[df_master["キーワード"] == l_key].iloc[0] if not df_master.empty and l_key in df_master["キーワード"].values else {}
+            
+            with col1:
+                ing_l = st.text_input("推奨成分", value=row_l.get("推奨成分", "CICA, ナイアシンアミド, パンテノール"), key="mst_lifestyle_all")
+            with col2:
+                phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活リズムの乱れによる肌荒れを防ぎ、土台を整える"), key="ph_lifestyle_all")
+            
+            # 保存用データに追加
+            master_data.append(["ライフスタイル", l_key, ing_l, phrase_l])
+
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
+
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
 
