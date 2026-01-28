@@ -818,247 +818,141 @@ elif menu == "📚 商品カルテ一覧":
             
             
 elif menu == "📈 アンケート分析":
-        st.header("📊 アンケートデータ詳細分析")
-        
-        if sub_df.empty:
-            st.warning("⚠️ 現在の絞り込み条件に一致するデータがありません。")
-        else:
-            # --- タブの定義（elseの直下でインデントを揃える） ---
-            tabs = st.tabs(["📈 スコア分析", "📉 相関分析", "🗣️ 生の声分析", "⚔️ 商品比較分析", "🔍 その他内訳"])
-            tab1, tab2, tab3, tab4, tab5 = tabs
-
-            # --- Tab 1: スコア分析 ---
-            with tab1:
-                st.write("📈 スコア分析")
-                col_chart1, col_chart2 = st.columns([2, 1])
-                with col_chart2:
-                    st.write("🔧 チャート設定")
-                    show_grid = st.toggle("グリッド線を表示", value=True, key="grid_t1")
-                    show_axis = st.toggle("軸ラベルを表示", value=True, key="axis_t1")
-                    display_mode = st.radio("表示形式", ["重ねて比較", "横に並べる"], horizontal=True, key="mode_t1")
-
-                item_col_name = conf["item_col"]
-                if item_col_name in sub_df.columns:
-                    target_items = sub_df[item_col_name]
-                    if isinstance(target_items, pd.DataFrame):
-                        # 複数列ある場合は、データを1列に積み上げる
-                        combined_items = target_items.stack()
-                    else:
-                        # 1列だけならそのまま
-                        combined_items = target_items
+    st.header("📊 アンケートデータ詳細分析")
     
-                    items = sorted(combined_items.dropna().unique())
-                else:
-                    items = []
-                selected_items = st.multiselect("比較する商品を選択", items, key="sel_t1")
+    if sub_df.empty:
+        st.warning("⚠️ 現在の絞り込み条件に一致するデータがありません。")
+    else:
+        # --- 共通変数の定義 ---
+        valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
+        item_col_name = conf["item_col"]
+
+        # --- タブの定義 ---
+        tabs = st.tabs(["🎯 推奨商品", "📈 スコア分析", "📉 相関分析", "📊 ボックスプロット", "🗣️ 生の声分析", "🔍 その他内訳"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = tabs
+
+        # --- Tab 1: 🎯 推奨商品（逆引き） ---
+        with tab1:
+            st.subheader("🎯 ターゲット別・推奨商品")
+            st.caption("特定の層で最も満足度が高い商品を抽出します。")
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                f_age = st.multiselect("年代", sorted(sub_df["年代"].dropna().unique()), key="rev_age")
+            with c2:
+                f_gender = st.multiselect("性別", sorted(sub_df["性別"].dropna().unique()), key="rev_gender")
+            with c3:
+                skin_col = "肌悩み"
+                f_skin = st.multiselect("肌悩み", sorted(sub_df[skin_col].dropna().unique()) if skin_col in sub_df.columns else [], key="rev_skin")
+
+            # フィルタリング
+            rev_df = sub_df.copy()
+            if f_age: rev_df = rev_df[rev_df["年代"].isin(f_age)]
+            if f_gender: rev_df = rev_df[rev_df["性別"].isin(f_gender)]
+            if f_skin: rev_df = rev_df[rev_df[skin_col].apply(lambda x: any(s in str(x) for s in f_skin))]
+
+            if not rev_df.empty and valid_scores:
+                # 商品名とスコアを抽出
+                rev_melted = rev_df.melt(id_vars=valid_scores, value_vars=item_col_name, value_name="対象商品").dropna(subset=["対象商品"])
+                if not rev_melted.empty:
+                    product_ranking = rev_melted.groupby("対象商品")[valid_scores].mean()
+                    product_ranking["総合スコア"] = product_ranking.mean(axis=1)
+                    product_ranking = product_ranking.sort_values("総合スコア", ascending=False)
+
+                    st.write(f"📊 **合致データ: {len(rev_df)}件**")
+                    for i, (p_name, row) in enumerate(product_ranking.head(3).iterrows()):
+                        with st.container(border=True):
+                            cl1, cl2 = st.columns([1, 4])
+                            cl1.title(f"#{i+1}")
+                            with cl2:
+                                st.markdown(f"### {p_name}")
+                                best_feat = row[valid_scores].idxmax()
+                                st.write(f"🌟 強み: **{best_feat}** ({row[best_feat]:.2f}) / 総合: {row['総合スコア']:.2f}")
+                                if st.button(f"✨ {p_name} のポップ案を作る", key=f"btn_link_{p_name}"):
+                                    st.session_state["selected_item_for_ai"] = p_name
+                                    st.success("AIポップ作成でこの商品が優先選択されます！")
+            else:
+                st.info("条件に一致するデータがありません。")
+
+        # --- Tab 2: 📈 スコア分析（レーダーチャート） ---
+        with tab2:
+            st.write("### 📈 商品間スコア比較")
+            # 商品リスト取得
+            all_items = sorted(sub_df[item_col_name].stack().dropna().unique()) if isinstance(sub_df[item_col_name], pd.DataFrame) else sorted(sub_df[item_col_name].dropna().unique())
+            sel_items = st.multiselect("比較する商品を選択", all_items, key="sel_t2")
+            
+            if sel_items and valid_scores:
+                import plotly.graph_objects as go
+                fig = go.Figure()
+                for i, item in enumerate(sel_items):
+                    # 各商品の平均を計算（複数列対応）
+                    if isinstance(sub_df[item_col_name], pd.DataFrame):
+                        mask = (sub_df[item_col_name] == item).any(axis=1)
+                    else:
+                        mask = (sub_df[item_col_name] == item)
+                    
+                    item_avg = sub_df[mask][valid_scores].mean()
+                    r_val = item_avg.values.tolist() + [item_avg.values[0]]
+                    theta_val = valid_scores + [valid_scores[0]]
+                    fig.add_trace(go.Scatterpolar(r=r_val, theta=theta_val, fill='toself', name=item))
                 
-                if selected_items:
-                    valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
-                    if display_mode == "重ねて比較":
-                        import plotly.graph_objects as go
-                        fig = go.Figure()
-                        for i, item in enumerate(selected_items):
-                            item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
-                            r_values = item_data.values.tolist()
-                            r_values += r_values[:1]
-                            theta_values = valid_scores + [valid_scores[0]]
-                            color = theme_colors[i % len(theme_colors)]
-                            fig.add_trace(go.Scatterpolar(
-                                r=r_values, theta=theta_values, fill='toself', 
-                                name=item, line=dict(color=color), opacity=0.5
-                            ))
-                        fig.update_layout(
-                            polar=dict(radialaxis=dict(visible=show_grid, range=[0, 5], showticklabels=show_axis)),
-                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        cols = st.columns(len(selected_items))
-                        for i, item in enumerate(selected_items):
-                            with cols[i]:
-                                item_data = sub_df[sub_df[conf["item_col"]] == item][valid_scores].mean()
-                                r_values = item_data.values.tolist() + [item_data.values[0]]
-                                theta_values = valid_scores + [valid_scores[0]]
-                                fig_sub = go.Figure(go.Scatterpolar(
-                                    r=r_values, theta=theta_values, fill='toself', name=item,
-                                    line=dict(color=theme_colors[i % len(theme_colors)])
-                                ))
-                                fig_sub.update_layout(polar=dict(radialaxis=dict(range=[0, 5])), title=item, showlegend=False, height=300)
-                                st.plotly_chart(fig_sub, use_container_width=True)
+                fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), height=450)
+                st.plotly_chart(fig, use_container_width=True)
 
-                    # --- カルテ記録機能 ---
-                    st.markdown("---")
-                    st.subheader("📝 分析結果をカルテに記録")
-                    col_save1, col_save2 = st.columns([2, 1])
-                    with col_save1:
-                        target_save_item = st.selectbox("記録する商品を選択", selected_items, key="save_analysis_item")
-                        target_stats = sub_df[sub_df[conf["item_col"]] == target_save_item][valid_scores].mean()
-                        best_feature = target_stats.idxmax()
-                    with col_save2:
-                        st.write(" ")
-                        if st.button("💾 分析結果をメモに追記"):
-                            try:
-                                client = get_gspread_client()
-                                sh = client.open("Cosme Data")
-                                sheet_k = sh.worksheet("カルテ")
-                                records = sheet_k.get_all_records()
-                                row_idx = next((i + 2 for i, r in enumerate(records) if str(r.get("商品名")) == target_save_item), None)
-                                if row_idx:
-                                    headers = sheet_k.row_values(1)
-                                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                                    if "メモ" in headers:
-                                        col_memo = headers.index("メモ") + 1
-                                        current_memo = sheet_k.cell(row_idx, col_memo).value or ""
-                                        new_memo = f"{current_memo}\n【自動追記】分析の結果、{best_feature}が最も高い評価でした。({now_str})".strip()
-                                        sheet_k.update_cell(row_idx, col_memo, new_memo)
-                                        st.success(f"「{target_save_item}」のメモに追記しました！")
-                                        st.balloons()
-                                else: st.warning("この商品はカルテにありません。")
-                            except Exception as e: st.error(f"保存失敗: {e}")
+        # --- Tab 3: 📉 相関分析 ---
+        with tab3:
+            st.subheader("📉 スコアの相関分析")
+            if len(valid_scores) >= 2:
+                c1, c2 = st.columns(2)
+                x_ax = c1.selectbox("横軸", valid_scores, index=0)
+                y_ax = c2.selectbox("縦軸", valid_scores, index=1)
+                import plotly.express as px
+                fig_scatter = px.scatter(sub_df, x=x_ax, y=y_ax, color="年代" if "年代" in sub_df.columns else None, range_x=[0,5.5], range_y=[0,5.5], template="plotly_white")
+                st.plotly_chart(fig_scatter, use_container_width=True)
 
-            # --- Tab 2: 相関分析 ---
-            with tab2:
-                st.subheader("📉 スコアの相関・分布分析")
-                valid_scores = [s for s in conf["scores"] if s in sub_df.columns]
-                if valid_scores:
-                    c1, c2 = st.columns(2)
-                    with c1: x_ax = st.selectbox("横軸", valid_scores, index=0, key="dist_x")
-                    with c2: y_ax = st.selectbox("縦軸", valid_scores, index=len(valid_scores)-1, key="dist_y")
-                    
-                    plot_df = sub_df.copy()
-                    plot_df[x_ax] = pd.to_numeric(plot_df[x_ax], errors='coerce')
-                    plot_df[y_ax] = pd.to_numeric(plot_df[y_ax], errors='coerce')
-                    plot_df = plot_df.dropna(subset=[x_ax, y_ax])
-                    
-                    import plotly.express as px
-                    
-                    # --- 🚨 修正ポイント：列名の安全確認 ---
-                    # 実際の列名に合わせて自動調整
-                    color_col = None
-                    if "年代" in plot_df.columns:
-                        color_col = "年代"
-                    elif "年齢" in plot_df.columns:
-                        color_col = "年齢"
-                    
-                    try:
-                        fig_scatter = px.scatter(
-                            plot_df, 
-                            x=x_ax, 
-                            y=y_ax, 
-                            color=color_col, # 列が見つからない場合はNone（色分けなし）になる
-                            hover_name=conf["item_col"] if conf["item_col"] in plot_df.columns else None, 
-                            range_x=[0, 5.5], 
-                            range_y=[0, 5.5], 
-                            template="plotly_white"
-                        )
-                        st.plotly_chart(fig_scatter, use_container_width=True)
-                    except Exception as e:
-                        st.error(f"散布図の表示に失敗しました。データ形式を確認してください。")
-            # --- Tab 3: 生の声分析 ---
-            with tab3:
-                st.subheader("🗣️ 生の声")
-                feedback_col = "感想" # リネーム後の名前に合わせる
-                item_col_name = conf["item_col"]
-                if feedback_col in sub_df.columns:
-                    target_feedback = sub_df[feedback_col]
-                    # もし複数列ある場合は、どれか1つでも入力があれば残す
-                    if isinstance(target_feedback, pd.DataFrame):
-                        mask = target_feedback.fillna("").ne("").any(axis=1)
-                    else:
-                        mask = target_feedback.fillna("") != ""
-    
-                    voice_base_df = sub_df[mask].copy()
-                else:
-                    voice_base_df = pd.DataFrame() # 列がなければ空のデータ
-                with st.expander("🛠️ フィルタ", expanded=True):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        # --- 931行目付近の修正 ---
-                        item_col_name = conf["item_col"]
-                        target_items = voice_base_df[item_col_name]
+        # --- Tab 4: 📊 ボックスプロット（比較分析） ---
+        with tab4:
+            st.subheader("📊 項目別スコア分布比較")
+            all_items = sorted(sub_df[item_col_name].stack().dropna().unique()) if isinstance(sub_df[item_col_name], pd.DataFrame) else sorted(sub_df[item_col_name].dropna().unique())
+            
+            col_a, col_b = st.columns(2)
+            item_a = col_a.selectbox("商品A", all_items, index=0)
+            item_b = col_b.selectbox("商品B", all_items, index=min(1, len(all_items)-1))
 
-                        # 複数列あっても1列にまとめてからユニーク値を取得
-                        if isinstance(target_items, pd.DataFrame):
-                            combined_items = target_items.stack()
-                        else:
-                            combined_items = target_items
+            if item_a and item_b:
+                # データの抽出
+                def get_item_df(name):
+                    mask = (sub_df[item_col_name] == name).any(axis=1) if isinstance(sub_df[item_col_name], pd.DataFrame) else (sub_df[item_col_name] == name)
+                    res = sub_df[mask][valid_scores].copy()
+                    res["商品名"] = name
+                    return res
 
-                         # multiselectの選択肢を作成
-                        f_items = st.multiselect("特定の商品", sorted(combined_items.dropna().unique()))
-                        f_word = st.text_input("検索", key="v_f_word")
-                    with c2:
-                        # --- 945行目付近の修正 ---
-                        skin_col_name = "肌悩み" # もし変数を使っているならそれに合わせてください
+                df_compare = pd.concat([get_item_df(item_a), get_item_df(item_b)])
+                melted_compare = df_compare.melt(id_vars=["商品名"], var_name="項目", value_name="スコア")
+                melted_compare["スコア"] = pd.to_numeric(melted_compare["スコa"], errors='coerce')
 
-                        if skin_col_name in voice_base_df.columns:
-                            target_skin = voice_base_df[skin_col_name]
-    
-                            # 複数列あっても1列にまとめてからユニーク値を取得
-                            if isinstance(target_skin, pd.DataFrame):
-                                combined_skin = target_skin.stack()
-                            else:
-                                combined_skin = target_skin
-        
-                            f_skin = st.multiselect("肌悩み", sorted(combined_skin.dropna().unique()))
-                        else:
-                            f_skin = st.multiselect("肌悩み", [])
-                f_df = voice_base_df.copy()
-                if f_items: f_df = f_df[f_df[item_col_name].isin(f_items)]
-                if f_word: f_df = f_df[f_df[feedback_col].str.contains(f_word, na=False)]
+                import plotly.express as px
+                fig_box = px.box(melted_compare, x="項目", y="スコア", color="商品名", points="all", title=f"{item_a} vs {item_b} の分布")
+                fig_box.update_layout(yaxis=dict(range=[0, 5.5]))
+                st.plotly_chart(fig_box, use_container_width=True)
+
+        # --- Tab 5: 🗣️ 生の声分析 ---
+        with tab5:
+            st.subheader("🗣️ 届いた感想（生の声）")
+            fb_col = "感想"
+            if fb_col in sub_df.columns:
+                f_df = sub_df[sub_df[fb_col].notna() & (sub_df[fb_col] != "")]
                 for _, row in f_df.iterrows():
                     with st.container(border=True):
-                        st.markdown(f"**📍 {row.get(item_col_name)}** ({row.get('性別')} | {row.get('年代')})")
-                        st.write(row[feedback_col])
+                        # 商品名（複数列対応）
+                        p_display = row[item_col_name].dropna().values[0] if isinstance(row[item_col_name], pd.Series) else row[item_col_name]
+                        st.markdown(f"**📍 {p_display}** ({row.get('年代', '不明')})")
+                        st.write(row[fb_col])
 
-            # --- Tab 4: 商品比較分析 ---
-            with tab4:
-                st.subheader("⚔️ 商品比較")
-                # --- 971行目の修正：商品比較用のリスト作成 ---
-                item_col_name = conf["item_col"]
-                raw_target = sub_df[item_col_name]
-
-                 # 複数列あっても1つにまとめてからユニーク値を取得
-                if isinstance(raw_target, pd.DataFrame):
-                    combined_raw = raw_target.stack()
-                else:
-                    combined_raw = raw_target
-
-                target_items = sorted(combined_raw.dropna().unique())
-# ------------------------------------------
-                if len(target_items) >= 2:
-                    col1, col2 = st.columns(2)
-                    with col1: item_a = st.selectbox("商品A", target_items, key="comp_a")
-                    with col2: item_b = st.selectbox("商品B", target_items, index=1, key="comp_b")
-                    if item_a != item_b:
-                        # --- 988行目の修正：複数列（商品名）のどこかに選んだ商品がある行を抽出 ---
-                        item_col = conf["item_col"]
-                        target_data = sub_df[item_col]
-
-                        if isinstance(target_data, pd.DataFrame):
-                            # 複数列ある場合：横方向に見て、どれか1列でも商品名が一致すればOK
-                            mask_a = (target_data == item_a).any(axis=1)
-                            mask_b = (target_data == item_b).any(axis=1)
-                        else:
-                            # 1列しかない場合：普通に比較
-                            mask_a = target_data == item_a
-                            mask_b = target_data == item_b
-
-                        df_a = sub_df[mask_a].copy()
-                        df_b = sub_df[mask_b].copy()
-                        # ------------------------------------------------------------------
-                        stats_a = df_a[valid_scores].apply(pd.to_numeric, errors='coerce').mean()
-                        stats_b = df_b[valid_scores].apply(pd.to_numeric, errors='coerce').mean()
-                        fig_comp = go.Figure()
-                        fig_comp.add_trace(go.Scatterpolar(r=stats_a.tolist()+[stats_a[0]], theta=valid_scores+[valid_scores[0]], fill='toself', name=item_a))
-                        fig_comp.add_trace(go.Scatterpolar(r=stats_b.tolist()+[stats_b[0]], theta=valid_scores+[valid_scores[0]], fill='toself', name=item_b))
-                        st.plotly_chart(fig_comp, use_container_width=True)
-                else: st.warning("比較には2つ以上の商品が必要です。")
-
-            # --- Tab 5: その他内訳 ---
-            with tab5:
-                st.subheader("🔍 その他内訳")
-                other_col = "商品のアイテムタイプにて『その他』を選んだ方は入力してください。"
-                others_df = sub_df[sub_df[other_col].fillna("").str.strip() != ""]
-                if not others_df.empty:
-                    st.dataframe(others_df[[conf["item_col"], "性別", "年代", other_col]], use_container_width=True, hide_index=True)
-                else: st.info("該当データなし")
+        # --- Tab 6: 🔍 その他内訳 ---
+        with tab6:
+            st.subheader("🔍 その他自由回答")
+            other_col = "商品のアイテムタイプにて『その他』を選んだ方は入力してください。"
+            if other_col in sub_df.columns:
+                others = sub_df[sub_df[other_col].notna() & (sub_df[other_col] != "")]
+                st.dataframe(others[[other_col]], use_container_width=True)
