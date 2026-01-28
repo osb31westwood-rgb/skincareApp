@@ -321,35 +321,48 @@ if type_col in sub_df.columns:
 if selected_genders:
     sub_df = sub_df[sub_df["性別"].isin(selected_genders)]
 
-# --- 4. 環境・ライフスタイルの詳細絞り込み ---
-st.markdown("---")
-st.subheader("🌐 環境・ライフスタイル分析")
+# --- サイドバーの既存メニュー（radioなど）のさらに下に追記 ---
 
-col_env = "最近、ご自身が置かれている環境で気になることはありますか？"
-col_life = "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？"
+st.sidebar.markdown("---") # 区切り線
 
-# A. 環境（複数選択項目）のフィルター
-if col_env in sub_df.columns:
-    # 選択肢：日差し・紫外線, 湿気によるべたつき・蒸れ, 摩擦 など
+# サイドバーの一番下に折りたたみ（expander）で配置
+with st.sidebar.expander("🌐 共通分析フィルター", expanded=False):
+    st.caption("全画面共通のデータ絞り込み")
+    
+    # アンケートの列名
+    col_env = "最近、ご自身が置かれている環境で気になることはありますか？"
+    col_life = "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？"
+    
+    # 1. 環境の絞り込み
     env_options = ["日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
-    selected_envs = st.multiselect("気になる環境で絞り込む", env_options)
-            
-    if selected_envs:
-        # 複数選択可の列から、選択したキーワードが含まれる行を抽出
-        pattern = '|'.join(selected_envs)
-        sub_df = sub_df[sub_df[col_env].str.contains(pattern, na=False)]
+    selected_envs = st.multiselect("気になる環境", env_options, key="sb_env")
+    
+    # 2. ライフスタイルの絞り込み
+    life_threshold = st.select_slider(
+        "ライフスタイル負荷(以上)",
+        options=[0, 1, 2, 3, 4, 5],
+        value=0,
+        key="sb_life"
+    )
 
-# B. ライフスタイル（0〜5の数値評価）のフィルター
-if col_life in sub_df.columns:
-    st.caption("ライフスタイル（ストレス・睡眠・食生活）の負荷レベル")
-    # 3以上の人を「負荷あり」として抽出するスライダー
-    life_threshold = st.slider("ライフスタイル負荷スコア以上の人を表示", 0, 5, 0)
-    if life_threshold > 0:
-        # 数値型に変換して比較
-        sub_df[col_life] = pd.to_numeric(sub_df[col_life], errors='coerce').fillna(0)
-        sub_df = sub_df[sub_df[col_life] >= life_threshold]
-
-st.markdown(f"📊 **現在の対象者数: {len(sub_df)} 名**")
+    # --- 絞り込みロジックの適用 ---
+    # ここで sub_df を作っておくと、各メニュー内でこれを使えます
+    if df is not None:
+        filtered_df = df.copy()
+        
+        # 環境で絞り込み
+        if selected_envs and col_env in filtered_df.columns:
+            pattern = '|'.join(selected_envs)
+            filtered_df = filtered_df[filtered_df[col_env].str.contains(pattern, na=False)]
+        
+        # ライフスタイルで絞り込み
+        if life_threshold > 0 and col_life in filtered_df.columns:
+            filtered_df[col_life] = pd.to_numeric(filtered_df[col_life], errors='coerce').fillna(0)
+            filtered_df = filtered_df[filtered_df[col_life] >= life_threshold]
+        
+        st.write(f"📊 対象者: **{len(filtered_df)}** 名")
+    else:
+        filtered_df = None
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
