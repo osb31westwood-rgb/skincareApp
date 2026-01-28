@@ -858,13 +858,12 @@ elif menu == "📚 商品カルテ一覧":
 
 elif menu == "🧪 成分マスタ編集":
     st.header("🧪 成分・悩みマスタ編集")
-    st.caption("ここで設定した成分とフレーズが、アンケート分析時のおすすめ理由になります。")
-
+    
     try:
         client = get_gspread_client()
         sh = client.open("Cosme Data")
         
-        # マスタ用シートの取得（なければ作成）
+        # マスタ用シートの取得（なければ自動作成）
         try:
             sheet_master = sh.worksheet("ingredient_master")
         except:
@@ -874,63 +873,71 @@ elif menu == "🧪 成分マスタ編集":
         records = sheet_master.get_all_records()
         df_master = pd.DataFrame(records)
 
-        # 設定項目の定義
-        trouble_list = ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]
-        env_list = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
-        l_key = "ストレス・睡眠・食生活"
-
-        # --- ここからフォーム開始 ---
-        with st.form(key="master_management_form"):
-            master_data = [] # データを一時保存するリスト
+        # 1. フォームの定義をここから開始
+        with st.form(key="master_edit_v3"):
+            st.subheader("🎯 推奨設定の入力")
             
-            st.subheader("🎯 肌悩み別の設定")
+            # データを溜めるリスト
+            master_data = []
+            
+            # 設定リスト
+            trouble_list = ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]
+            env_list = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
+            l_key = "ストレス・睡眠・食生活"
+
+            # --- 悩みループ ---
             for t in trouble_list:
-                col1, col2 = st.columns([1, 2])
+                c1, c2 = st.columns([1, 2])
                 row = df_master[df_master["キーワード"] == t].iloc[0] if not df_master.empty and t in df_master["キーワード"].values else {}
-                with col1:
+                with c1:
                     ing = st.text_input(f"【{t}】の成分", value=row.get("推奨成分", ""), key=f"ing_{t}")
-                with col2:
-                    phrase = st.text_input(f"【{t}】のフレーズ", value=row.get("フレーズ", ""), key=f"ph_{t}")
+                with c2:
+                    phrase = st.text_input(f"フレーズ", value=row.get("フレーズ", ""), key=f"ph_{t}")
                 master_data.append(["悩み", t, ing, phrase])
 
             st.divider()
-            st.subheader("🌍 環境・ライフスタイルの設定")
+
+            # --- 環境ループ ---
             for e in env_list:
-                col1, col2 = st.columns([1, 2])
+                c1, c2 = st.columns([1, 2])
                 row = df_master[df_master["キーワード"] == e].iloc[0] if not df_master.empty and e in df_master["キーワード"].values else {}
-                with col1:
-                    ing = st.text_input(f"【{e}】の成分", value=row.get("推奨成分", ""), key=f"ing_{e}")
-                with col2:
-                    phrase = st.text_input(f"【{e}】のフレーズ", value=row.get("フレーズ", ""), key=f"ph_{e}")
+                with c1:
+                    ing = st.text_input(f"【環境:{e}】の成分", value=row.get("推奨成分", ""), key=f"ing_{e}")
+                with c2:
+                    phrase = st.text_input(f"フレーズ", value=row.get("フレーズ", ""), key=f"ph_{e}")
                 master_data.append(["環境", e, ing, phrase])
 
-            st.info(f"💡 {l_key} の設定（一括り項目）")
-            col1, col2 = st.columns([1, 2])
+            st.divider()
+
+            # --- ライフスタイル（一括り） ---
+            st.info(f"💡 {l_key} の一括設定")
+            c1, c2 = st.columns([1, 2])
             row_l = df_master[df_master["キーワード"] == l_key].iloc[0] if not df_master.empty and l_key in df_master["キーワード"].values else {}
-            with col1:
+            with c1:
                 ing_l = st.text_input("推奨成分", value=row_l.get("推奨成分", "CICA, ナイアシンアミド"), key="mst_lifestyle_all")
-            with col2:
+            with c2:
                 phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活の乱れから肌を守る"), key="ph_lifestyle_all")
             master_data.append(["ライフスタイル", l_key, ing_l, phrase_l])
 
-            # ★【最重要】ここが「with st.form」のインデント（右空白）の終わりの位置です
+            # ★【重要】このボタンが "with st.form" の中に存在することを確認してください
+            # インデント（左の空白）が他の入力欄と揃っている必要があります
             submitted = st.form_submit_button("✅ この内容でマスタを保存する")
 
-        # --- ここからフォームの外（保存処理） ---
+        # --- ここからフォームの外（ボタンが押された後の処理） ---
         if submitted:
-            with st.spinner("スプレッドシートを更新中..."):
-                now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-                header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
-                final_rows = [header]
-                for data_row in master_data:
-                    final_rows.append(data_row + [now_str])
-                
-                sheet_master.clear()
-                sheet_master.update("A1", final_rows)
-                st.success("成分マスタを更新しました！スプレッドシートを確認してください。")
+            now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
+            header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
+            final_rows = [header]
+            for d in master_data:
+                final_rows.append(d + [now_str])
+            
+            sheet_master.clear()
+            sheet_master.update("A1", final_rows)
+            st.success("スプレッドシートへの保存が完了しました！")
+            st.balloons() # 成功のお祝い
 
     except Exception as e:
-        st.error(f"システムエラーが発生しました: {e}")
+        st.error(f"システムエラー: {e}")
 
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
