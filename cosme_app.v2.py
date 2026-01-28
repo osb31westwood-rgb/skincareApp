@@ -263,6 +263,7 @@ with st.sidebar:
     )
 
     st.markdown("---")
+
     if df is not None:
         # --- 共通の絞り込みフィルター ---
         with st.expander("⚙️ データ絞り込み（クリックで開閉）", expanded=True):
@@ -317,6 +318,62 @@ with st.sidebar:
                 value=0,
                 help="右に動かすほど、生活習慣に課題がある層に絞り込まれます"
         )
+            
+    def display_recommendation_ranking(target_df, master_df, karte_df):
+        """
+        ターゲット層の悩みからおすすめ商品を生成して表示する共通関数
+        """
+        st.divider()
+        st.subheader("🏆 この層に最適な商品ランキング")
+    
+        # 悩み列の特定
+        trouble_col = "肌のお悩み（※複数選択可）"
+        if trouble_col not in target_df.columns:
+            st.error("悩みデータが見つかりません。")
+            return
+
+        # 悩みの集計
+        all_troubles = target_df[trouble_col].str.split(',|、').explode().str.strip()
+        top_troubles = all_troubles.value_counts().head(3).index.tolist()
+
+        if not top_troubles:
+            st.warning("このターゲット層には集計可能な悩みデータがありません。")
+            return
+
+        st.write(f"💡 主要な悩み: **{', '.join(top_troubles)}**")
+    
+        recommendations = []
+        for trouble in top_troubles:
+            # マスタから成分取得
+            m_match = master_df[master_df["キーワード"] == trouble]
+            if not m_match.empty:
+                target_ing = m_match.iloc[0]["推奨成分"]
+                phrase = m_match.iloc[0]["理由・ポップ用フレーズ"]
+            
+                # カルテの「全成分」から検索
+                matches = karte_df[karte_df["全成分"].str.contains(target_ing, na=False, case=False)]
+                for _, p in matches.iterrows():
+                    recommendations.append({
+                        "商品名": p["商品名"],
+                        "きっかけ": trouble,
+                        "推奨成分": target_ing,
+                        "アドバイス": phrase,
+                        "画像": p.get("画像URL", "")
+                    })
+
+        if recommendations:
+            unique_recs = pd.DataFrame(recommendations).drop_duplicates(subset="商品名").head(3)
+            cols = st.columns(len(unique_recs))
+            for i, (_, rec) in enumerate(unique_recs.iterrows()):
+                with cols[i]:
+                    if rec["画像"]:
+                        st.image(rec["画像"], use_container_width=True)
+                    st.markdown(f"**第{i+1}位: {rec['商品名']}**")
+                    st.caption(f"🧬 {rec['きっかけ']}ケア / {rec['推奨成分']}")
+                    st.success(rec["アドバイス"])
+        else:
+            st.info("条件に合う成分を含む商品がまだ登録されていません。")
+
 
     # --- フィルタ適用ロジック（以下は変更なし） ---
     # ... (前回のフィルタ適用コードをそのまま使用) ...
