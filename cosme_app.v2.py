@@ -867,48 +867,77 @@ elif menu == "📈 アンケート分析":
         tab1, tab2, tab3, tab4, tab5, tab6 = tabs
 
         # --- Tab 1: 🎯 推奨商品（逆引き） ---
-        with tab1:
-            st.subheader("🎯 ターゲット別・推奨商品")
-            st.caption("特定の層で最も満足度が高い商品を抽出します。")
+with tab1:
+    st.subheader("🎯 ターゲット別・推奨商品")
 
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                f_age = st.multiselect("年代", sorted(sub_df["年代"].dropna().unique()), key="rev_age")
-            with c2:
-                f_gender = st.multiselect("性別", sorted(sub_df["性別"].dropna().unique()), key="rev_gender")
-            with c3:
-                skin_col = "肌悩み"
-                f_skin = st.multiselect("肌悩み", sorted(sub_df[skin_col].dropna().unique()) if skin_col in sub_df.columns else [], key="rev_skin")
+    # 【重要】列が存在するか事前にチェック（エラー回避）
+    age_col = "年代" if "年代" in sub_df.columns else None
+    gen_col = "性別" if "性別" in sub_df.columns else None
+    skin_col = "肌悩み" if "肌悩み" in sub_df.columns else None
 
-            # フィルタリング
-            rev_df = sub_df.copy()
-            if f_age: rev_df = rev_df[rev_df["年代"].isin(f_age)]
-            if f_gender: rev_df = rev_df[rev_df["性別"].isin(f_gender)]
-            if f_skin: rev_df = rev_df[rev_df[skin_col].apply(lambda x: any(s in str(x) for s in f_skin))]
+    c1, c2, c3 = st.columns(3)
+    
+    # 年代フィルター（列がある時だけ表示）
+    with c1:
+        if age_col:
+            f_age = st.multiselect("年代で絞り込む", sorted(sub_df[age_col].dropna().unique()), key="rev_age")
+        else:
+            st.caption("⚠️ '年代'列がデータにありません")
+            f_age = []
 
-            if not rev_df.empty and valid_scores:
-                # 商品名とスコアを抽出
-                rev_melted = rev_df.melt(id_vars=valid_scores, value_vars=item_col_name, value_name="対象商品").dropna(subset=["対象商品"])
-                if not rev_melted.empty:
-                    product_ranking = rev_melted.groupby("対象商品")[valid_scores].mean()
-                    product_ranking["総合スコア"] = product_ranking.mean(axis=1)
-                    product_ranking = product_ranking.sort_values("総合スコア", ascending=False)
+    # 性別フィルター
+    with c2:
+        if gen_col:
+            f_gender = st.multiselect("性別で絞り込む", sorted(sub_df[gen_col].dropna().unique()), key="rev_gender")
+        else:
+            st.caption("⚠️ '性別'列がデータにありません")
+            f_gender = []
 
-                    st.write(f"📊 **合致データ: {len(rev_df)}件**")
-                    for i, (p_name, row) in enumerate(product_ranking.head(3).iterrows()):
-                        with st.container(border=True):
-                            cl1, cl2 = st.columns([1, 4])
-                            cl1.title(f"#{i+1}")
-                            with cl2:
-                                st.markdown(f"### {p_name}")
-                                best_feat = row[valid_scores].idxmax()
-                                st.write(f"🌟 強み: **{best_feat}** ({row[best_feat]:.2f}) / 総合: {row['総合スコア']:.2f}")
-                                if st.button(f"✨ {p_name} のポップ案を作る", key=f"btn_link_{p_name}"):
-                                    st.session_state["selected_item_for_ai"] = p_name
-                                    st.success("AIポップ作成でこの商品が優先選択されます！")
-            else:
-                st.info("条件に一致するデータがありません。")
+    # 肌悩みフィルター
+    with c3:
+        if skin_col:
+            f_skin = st.multiselect("肌悩みで絞り込む", sorted(sub_df[skin_col].dropna().unique()), key="rev_skin")
+        else:
+            f_skin = []
 
+    # データのフィルタリング処理
+    rev_df = sub_df.copy()
+    if f_age and age_col: rev_df = rev_df[rev_df[age_col].isin(f_age)]
+    if f_gender and gen_col: rev_df = rev_df[rev_df[gen_col].isin(f_gender)]
+    if f_skin and skin_col: 
+        rev_df = rev_df[rev_df[skin_col].apply(lambda x: any(s in str(x) for s in f_skin))]
+
+    # 分析結果の表示
+    if not rev_df.empty and valid_scores:
+        item_col = conf["item_col"]
+        rev_melted = rev_df.melt(id_vars=valid_scores, value_vars=item_col, value_name="対象商品").dropna(subset=["対象商品"])
+        
+        if not rev_melted.empty:
+            product_ranking = rev_melted.groupby("対象商品")[valid_scores].mean()
+            product_ranking["総合スコア"] = product_ranking.mean(axis=1)
+            product_ranking = product_ranking.sort_values("総合スコア", ascending=False)
+
+            st.write(f"📊 **条件に合う回答: {len(rev_df)}件**")
+
+            for i, (p_name, row) in enumerate(product_ranking.head(3).iterrows()):
+                with st.container(border=True):
+                    col_rank, col_txt = st.columns([1, 4])
+                    col_rank.title(f"#{i+1}")
+                    with col_txt:
+                        st.markdown(f"### {p_name}")
+                        best_feat = row[valid_scores].idxmax()
+                        st.write(f"🌟 強み: **{best_feat}** ({row[best_feat]:.2f}点)")
+                        st.progress(row["総合スコア"]/5.0)
+                        
+                        # --- AIポップへの連携ボタン ---
+                        if st.button(f"✨ {p_name} のポップ案を作る", key=f"btn_link_{p_name}"):
+                            st.session_state["ai_pop_selected_item"] = p_name
+                            # メニュー選択のキー名はアプリの初期設定に合わせてください
+                            if "menu" in st.session_state: st.session_state["menu"] = "✨ AIポップ作成"
+                            st.rerun()
+    else:
+        st.info("条件に一致するデータがないか、評価項目が設定されていません。")
+        
         # --- Tab 2: 📈 スコア分析（レーダーチャート） ---
         with tab2:
             st.write("### 📈 商品間スコア比較")
