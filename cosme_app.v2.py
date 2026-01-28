@@ -321,13 +321,7 @@ if type_col in sub_df.columns:
 if selected_genders:
     sub_df = sub_df[sub_df["性別"].isin(selected_genders)]
 
-# --- サイドバーの既存メニュー（radioなど）のさらに下に追記 ---
 
-st.sidebar.markdown("---") # 区切り線
-
-# --- サイドバーの最下部に追記 ---
-
-st.sidebar.markdown("---") 
 
 with st.sidebar.expander("🌐 環境・ライフルタイル", expanded=False):
     st.caption("全画面共通のデータ絞り込み")
