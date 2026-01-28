@@ -873,10 +873,8 @@ elif menu == "🧪 成分マスタ編集":
         records = sheet_master.get_all_records()
         df_master = pd.DataFrame(records)
 
-        # 1. フォームの定義をここから開始
-        with st.form(key="master_edit_v3"):
-            st.subheader("🎯 推奨設定の入力")
-            
+        # フォームの開始
+        with st.form(key="master_final_form"):
             # データを溜めるリスト
             master_data = []
             
@@ -885,60 +883,43 @@ elif menu == "🧪 成分マスタ編集":
             env_list = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
             l_key = "ストレス・睡眠・食生活"
 
-            # --- 悩みループ ---
-            for t in trouble_list:
+            st.subheader("🎯 肌悩み・環境・生活の設定")
+
+            # 悩みと環境をまとめてループ
+            for k in trouble_list + env_list + [l_key]:
+                # 既存データの検索
+                row = df_master[df_master["キーワード"] == k].iloc[0] if not df_master.empty and k in df_master["キーワード"].values else {}
+                
                 c1, c2 = st.columns([1, 2])
-                row = df_master[df_master["キーワード"] == t].iloc[0] if not df_master.empty and t in df_master["キーワード"].values else {}
                 with c1:
-                    ing = st.text_input(f"【{t}】の成分", value=row.get("推奨成分", ""), key=f"ing_{t}")
+                    ing = st.text_input(f"【{k}】成分", value=row.get("推奨成分", ""), key=f"ing_v4_{k}")
                 with c2:
-                    phrase = st.text_input(f"フレーズ", value=row.get("フレーズ", ""), key=f"ph_{t}")
-                master_data.append(["悩み", t, ing, phrase])
+                    phrase = st.text_input(f"推奨理由", value=row.get("フレーズ", ""), key=f"ph_v4_{k}")
+                
+                # 分類を判定してリストに追加
+                cat = "悩み" if k in trouble_list else ("環境" if k in env_list else "ライフスタイル")
+                master_data.append([cat, k, ing, phrase])
 
-            st.divider()
+            # ★【最重要】このボタンの「s」が、上の「for」や「c1」と同じ位置にあること！
+            submitted = st.form_submit_button("✅ マスタ内容を保存する")
 
-            # --- 環境ループ ---
-            for e in env_list:
-                c1, c2 = st.columns([1, 2])
-                row = df_master[df_master["キーワード"] == e].iloc[0] if not df_master.empty and e in df_master["キーワード"].values else {}
-                with c1:
-                    ing = st.text_input(f"【環境:{e}】の成分", value=row.get("推奨成分", ""), key=f"ing_{e}")
-                with c2:
-                    phrase = st.text_input(f"フレーズ", value=row.get("フレーズ", ""), key=f"ph_{e}")
-                master_data.append(["環境", e, ing, phrase])
-
-            st.divider()
-
-            # --- ライフスタイル（一括り） ---
-            st.info(f"💡 {l_key} の一括設定")
-            c1, c2 = st.columns([1, 2])
-            row_l = df_master[df_master["キーワード"] == l_key].iloc[0] if not df_master.empty and l_key in df_master["キーワード"].values else {}
-            with c1:
-                ing_l = st.text_input("推奨成分", value=row_l.get("推奨成分", "CICA, ナイアシンアミド"), key="mst_lifestyle_all")
-            with c2:
-                phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活の乱れから肌を守る"), key="ph_lifestyle_all")
-            master_data.append(["ライフスタイル", l_key, ing_l, phrase_l])
-
-            # ★【重要】このボタンが "with st.form" の中に存在することを確認してください
-            # インデント（左の空白）が他の入力欄と揃っている必要があります
-            submitted = st.form_submit_button("✅ この内容でマスタを保存する")
-
-        # --- ここからフォームの外（ボタンが押された後の処理） ---
+        # --- ここからフォームの外 ---
         if submitted:
-            now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-            header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
-            final_rows = [header]
-            for d in master_data:
-                final_rows.append(d + [now_str])
-            
-            sheet_master.clear()
-            sheet_master.update("A1", final_rows)
-            st.success("スプレッドシートへの保存が完了しました！")
-            st.balloons() # 成功のお祝い
+            with st.spinner("保存中..."):
+                now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
+                header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
+                final_rows = [header]
+                for d in master_data:
+                    final_rows.append(d + [now_str])
+                
+                sheet_master.clear()
+                sheet_master.update("A1", final_rows)
+                st.success("スプレッドシートへの保存が完了しました！")
+                st.balloons()
 
     except Exception as e:
         st.error(f"システムエラー: {e}")
-
+        
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
 
