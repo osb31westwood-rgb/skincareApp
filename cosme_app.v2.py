@@ -883,9 +883,9 @@ elif menu == "🧪 成分マスタ編集":
             st.subheader("🎯 肌悩み別の設定")
             master_data = []
             
+            # --- 肌悩みループ ---
             for t in trouble_list:
                 col1, col2 = st.columns([1, 2])
-                # 既存データの取得
                 row = df_master[df_master["キーワード"] == t].iloc[0] if not df_master.empty and t in df_master["キーワード"].values else {}
                 with col1:
                     ing = st.text_input(f"【{t}】の成分", value=row.get("推奨成分", ""), key=f"ing_{t}")
@@ -895,7 +895,8 @@ elif menu == "🧪 成分マスタ編集":
 
             st.divider()
             st.subheader("🌍 環境・ライフスタイルの設定")
-            # 1. まずは「環境」の4項目をループで表示
+            
+            # --- 環境ループ ---
             for e in env_list:
                 col1, col2 = st.columns([1, 2])
                 row = df_master[df_master["キーワード"] == e].iloc[0] if not df_master.empty and e in df_master["キーワード"].values else {}
@@ -905,23 +906,32 @@ elif menu == "🧪 成分マスタ編集":
                     phrase = st.text_input(f"【{e}】のフレーズ", value=row.get("フレーズ", ""), key=f"ph_{e}")
                 master_data.append(["環境", e, ing, phrase])
 
-            st.markdown("---") # ちょっと区切りを入れると見やすいです
-            
-            # 2. ここに「ライフスタイル（一括り）」の設定を入れる！
-            st.info("💡 以下の設定は、ストレス・睡眠・食生活の合計スコアが高い人に適用されます。")
+            st.markdown("---")
+            st.info("💡 ストレス・睡眠・食生活の合計スコアが高い人への設定")
             
             l_key = "ストレス・睡眠・食生活"
             col1, col2 = st.columns([1, 2])
-            # 既存データの取得
             row_l = df_master[df_master["キーワード"] == l_key].iloc[0] if not df_master.empty and l_key in df_master["キーワード"].values else {}
-            
             with col1:
                 ing_l = st.text_input("推奨成分", value=row_l.get("推奨成分", "CICA, ナイアシンアミド, パンテノール"), key="mst_lifestyle_all")
             with col2:
-                phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活リズムの乱れによる肌荒れを防ぎ、土台を整える"), key="ph_lifestyle_all")
-            
-            # 保存用データに追加
+                phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活の乱れから肌を守る"), key="ph_lifestyle_all")
             master_data.append(["ライフスタイル", l_key, ing_l, phrase_l])
+
+            # ★ここが重要！フォームの中にボタンを入れる
+            submitted = st.form_submit_button("✅ マスタ内容をスプレッドシートに保存")
+
+        # フォームの外で、ボタンが押された時の処理を書く
+        if submitted:
+            now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
+            sheet_master.clear()
+            header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
+            final_rows = [header]
+            for row in master_data:
+                final_rows.append(row + [now_str])
+            
+            sheet_master.update("A1", final_rows)
+            st.success("マスタを更新しました！")
 
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
