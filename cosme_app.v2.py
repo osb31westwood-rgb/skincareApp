@@ -1036,6 +1036,79 @@ elif menu == "📈 アンケート分析":
                 fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), height=450)
                 st.plotly_chart(fig, use_container_width=True)
 
+# --- 📊 グラフ表示エリアが終了した後に追記 ---
+st.divider()
+st.header("🏆 ターゲット別 おすすめ商品ランキング")
+st.caption("現在の絞り込み条件に合致する回答者の「肌悩み」を分析し、最適な商品を抽出します。")
+
+if st.button("🚀 このターゲット向けのランキングを生成する", use_container_width=True):
+    with st.spinner("カルテと成分マスタを照合中..."):
+        # 1. 絞り込まれた人たちの「悩み」を合計・集計
+        # アンケートの悩み列（複数選択）をカウント
+        trouble_col = "肌のお悩み（※複数選択可）" # 正確な列名に合わせてください
+        if trouble_col in sub_df.columns:
+            # 悩みワードをバラして集計
+            all_troubles = sub_df[trouble_col].str.split(',|、').explode().str.strip()
+            trouble_ranking = all_troubles.value_counts()
+            
+            # 最も多い悩み（トップ3）を取得
+            top_troubles = trouble_ranking.head(3).index.tolist()
+            
+            if top_troubles:
+                st.write(f"💡 この層の主要な悩み: **{', '.join(top_troubles)}**")
+                
+                # 2. 成分マスタから推奨成分を取得
+                try:
+                    master_records = sheet_master.get_all_records()
+                    df_m = pd.DataFrame(master_records)
+                    
+                    # 3. 商品カルテからマッチする商品を抽出
+                    karte_records = sheet_karte.get_all_records()
+                    df_k = pd.DataFrame(karte_records)
+                    
+                    recommendations = []
+                    
+                    for trouble in top_troubles:
+                        # マスタから成分を取得
+                        m_match = df_m[df_m["キーワード"] == trouble]
+                        if not m_match.empty:
+                            target_ing = m_match.iloc[0]["推奨成分"]
+                            phrase = m_match.iloc[0]["理由・ポップ用フレーズ"]
+                            
+                            # カルテの「全成分」に含まれている商品を検索
+                            # (注: 部分一致検索)
+                            matches = df_k[df_k["全成分"].str.contains(target_ing, na=False, case=False)]
+                            
+                            for _, p in matches.iterrows():
+                                recommendations.append({
+                                    "商品名": p["商品名"],
+                                    "きっかけ": trouble,
+                                    "推奨成分": target_ing,
+                                    "アドバイス": phrase,
+                                    "画像": p.get("画像URL", "")
+                                })
+                    
+                    # 4. 結果の表示（重複を除いて表示）
+                    if recommendations:
+                        # 重複削除（同じ商品が複数の悩みでヒットした場合）
+                        unique_recs = pd.DataFrame(recommendations).drop_duplicates(subset="商品名").head(3)
+                        
+                        cols = st.columns(len(unique_recs))
+                        for i, (_, rec) in enumerate(unique_recs.iterrows()):
+                            with cols[i]:
+                                if rec["画像"]:
+                                    st.image(rec["画像"], use_container_width=True)
+                                st.subheader(f"第{i+1}位")
+                                st.markdown(f"**{rec['商品名']}**")
+                                st.info(f"🧬 **{rec['きっかけ']}**に効く**{rec['推奨成分']}**配合")
+                                st.success(f"💬 {rec['アドバイス']}")
+                    else:
+                        st.warning("条件に完全に一致する成分を含む商品が見つかりませんでした。")
+                except Exception as e:
+                    st.error(f"ランキング生成中にエラーが発生しました: {e}")
+        else:
+            st.error("アンケートデータに『悩み』の列が見つかりません。")
+
         # --- Tab 3: 📉 相関分析 ---
         with tab3:
             st.subheader("📉 スコアの相関分析")
@@ -1120,78 +1193,7 @@ if st.button("🚀 このターゲット向けのランキングを生成する"
         else:
             st.error("アンケートデータに『悩み』の列が見つかりません。")
 
-# --- 📊 グラフ表示エリアが終了した後に追記 ---
-st.divider()
-st.header("🏆 ターゲット別 おすすめ商品ランキング")
-st.caption("現在の絞り込み条件に合致する回答者の「肌悩み」を分析し、最適な商品を抽出します。")
 
-if st.button("🚀 このターゲット向けのランキングを生成する", use_container_width=True):
-    with st.spinner("カルテと成分マスタを照合中..."):
-        # 1. 絞り込まれた人たちの「悩み」を合計・集計
-        # アンケートの悩み列（複数選択）をカウント
-        trouble_col = "肌のお悩み（※複数選択可）" # 正確な列名に合わせてください
-        if trouble_col in sub_df.columns:
-            # 悩みワードをバラして集計
-            all_troubles = sub_df[trouble_col].str.split(',|、').explode().str.strip()
-            trouble_ranking = all_troubles.value_counts()
-            
-            # 最も多い悩み（トップ3）を取得
-            top_troubles = trouble_ranking.head(3).index.tolist()
-            
-            if top_troubles:
-                st.write(f"💡 この層の主要な悩み: **{', '.join(top_troubles)}**")
-                
-                # 2. 成分マスタから推奨成分を取得
-                try:
-                    master_records = sheet_master.get_all_records()
-                    df_m = pd.DataFrame(master_records)
-                    
-                    # 3. 商品カルテからマッチする商品を抽出
-                    karte_records = sheet_karte.get_all_records()
-                    df_k = pd.DataFrame(karte_records)
-                    
-                    recommendations = []
-                    
-                    for trouble in top_troubles:
-                        # マスタから成分を取得
-                        m_match = df_m[df_m["キーワード"] == trouble]
-                        if not m_match.empty:
-                            target_ing = m_match.iloc[0]["推奨成分"]
-                            phrase = m_match.iloc[0]["理由・ポップ用フレーズ"]
-                            
-                            # カルテの「全成分」に含まれている商品を検索
-                            # (注: 部分一致検索)
-                            matches = df_k[df_k["全成分"].str.contains(target_ing, na=False, case=False)]
-                            
-                            for _, p in matches.iterrows():
-                                recommendations.append({
-                                    "商品名": p["商品名"],
-                                    "きっかけ": trouble,
-                                    "推奨成分": target_ing,
-                                    "アドバイス": phrase,
-                                    "画像": p.get("画像URL", "")
-                                })
-                    
-                    # 4. 結果の表示（重複を除いて表示）
-                    if recommendations:
-                        # 重複削除（同じ商品が複数の悩みでヒットした場合）
-                        unique_recs = pd.DataFrame(recommendations).drop_duplicates(subset="商品名").head(3)
-                        
-                        cols = st.columns(len(unique_recs))
-                        for i, (_, rec) in enumerate(unique_recs.iterrows()):
-                            with cols[i]:
-                                if rec["画像"]:
-                                    st.image(rec["画像"], use_container_width=True)
-                                st.subheader(f"第{i+1}位")
-                                st.markdown(f"**{rec['商品名']}**")
-                                st.info(f"🧬 **{rec['きっかけ']}**に効く**{rec['推奨成分']}**配合")
-                                st.success(f"💬 {rec['アドバイス']}")
-                    else:
-                        st.warning("条件に完全に一致する成分を含む商品が見つかりませんでした。")
-                except Exception as e:
-                    st.error(f"ランキング生成中にエラーが発生しました: {e}")
-        else:
-            st.error("アンケートデータに『悩み』の列が見つかりません。")
 
         # --- Tab 4: 📊 ボックスプロット（比較分析） ---
         with tab4:
