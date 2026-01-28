@@ -246,6 +246,7 @@ with st.sidebar:
             "📋 商品カルテ編集", 
             "📚 商品カルテ一覧", 
             "🧪 成分マスタ編集",
+            "🧪 成分マスタ一覧",
             "📈 アンケート分析"
         ],
         icons=["qr-code-scan", "magic", "pencil-square", "collection", "bar-chart-line", "graph-up"],
@@ -999,6 +1000,74 @@ elif menu == "🧪 成分マスタ編集":
             st.success("マスタを更新しました！『乾燥』の重複問題も解決済みです。")
             st.balloons()
 
+elif menu == "🧪 成分マスタ一覧":
+    st.header("🧪 登録済み成分・悩みマスタ")
+    try:
+        client = get_gspread_client()
+        sh = client.open("Cosme Data")
+        # マスタ用シートの取得
+        try:
+            sheet_master = sh.worksheet("ingredient_master")
+            records = sheet_master.get_all_records()
+        except:
+            st.error("マスタシートが見つかりません。先に『マスタ編集』から保存を行ってください。")
+            st.stop()
+
+        if records:
+            df_master = pd.DataFrame(records)
+            
+            # --- 1. 話題の成分ピックアップ ---
+            if "話題の成分フラグ" in df_master.columns:
+                trend_df = df_master[df_master["話題の成分フラグ"] == "TRUE"]
+                if not trend_df.empty:
+                    st.subheader("🔥 今注目のトレンド成分")
+                    cols = st.columns(len(trend_df.head(4)))
+                    for i, (_, row) in enumerate(trend_df.head(4).iterrows()):
+                        with cols[i]:
+                            st.metric(label=row["キーワード"], value=row["推奨成分"])
+                            st.caption(row["理由・ポップ用フレーズ"])
+                    st.divider()
+
+            # --- 2. 全体リストをテーブル表示 ---
+            st.subheader("📋 マスタ全データ")
+            
+            # 検索機能を追加（キーワードや成分で絞り込み）
+            search_q = st.text_input("🔍 マスタ内を検索（悩み名、成分名など）", "")
+            if search_q:
+                df_display = df_master[
+                    df_master["キーワード"].str.contains(search_q, na=False) | 
+                    df_master["推奨成分"].str.contains(search_q, na=False)
+                ]
+            else:
+                df_display = df_master
+
+            # 見やすい順に列を並び替え
+            view_cols = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ", "更新日"]
+            actual_cols = [c for c in view_cols if c in df_display.columns]
+            
+            st.dataframe(
+                df_display[actual_cols], 
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # --- 3. カテゴリ別のクイック確認 ---
+            st.markdown("---")
+            st.subheader("💡 カテゴリ別クイック確認")
+            tabs = st.tabs(["悩み別", "環境別", "生活別"])
+            
+            with tabs[0]:
+                st.table(df_master[df_master["分類"] == "悩み"][["キーワード", "推奨成分", "理由・ポップ用フレーズ"]])
+            with tabs[1]:
+                st.table(df_master[df_master["分類"] == "環境"][["キーワード", "推奨成分", "理由・ポップ用フレーズ"]])
+            with tabs[2]:
+                st.table(df_master[df_master["分類"] == "生活"][["キーワード", "推奨成分", "理由・ポップ用フレーズ"]])
+
+        else:
+            st.info("マスタデータがまだ登録されていません。")
+
+    except Exception as e:
+        st.error(f"表示エラー: {e}")
 
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
