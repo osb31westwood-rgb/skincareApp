@@ -863,21 +863,18 @@ elif menu == "🧪 成分マスタ編集":
         client = get_gspread_client()
         sh = client.open("Cosme Data")
         
-        # マスタ用シートの取得（なければ自動作成）
         try:
             sheet_master = sh.worksheet("ingredient_master")
         except:
             sheet_master = sh.add_worksheet(title="ingredient_master", rows="100", cols="10")
-            # 新しい列順でヘッダー作成
             header = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "更新日", "話題の成分フラグ"]
             sheet_master.append_row(header)
 
         records = sheet_master.get_all_records()
         df_master = pd.DataFrame(records)
         
-        # 列名チェック（KeyError対策）
-        expected_cols = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ"]
-        for col in expected_cols:
+        # 必要な列がない場合の補完
+        for col in ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ"]:
             if col not in df_master.columns:
                 df_master[col] = ""
 
@@ -885,56 +882,59 @@ elif menu == "🧪 成分マスタ編集":
         st.error(f"接続エラー: {e}")
         st.stop()
 
-    # フォームの開始
-    with st.form(key="master_final_v7"):
+    # 重複エラーを防ぐため、一意のkeyを持つフォームを作成
+    with st.form(key="master_final_v8"):
         st.subheader("🎯 推奨設定とトレンド成分")
         master_data_list = []
         
-        target_keys = [
-            ("悩み", ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]),
-            ("環境", ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]),
-            ("生活", ["ストレス・睡眠・食生活"])
+        # カテゴリごとにループ
+        # 「乾燥」が重複しても大丈夫なように、キーにカテゴリ名(cat_id)を混ぜます
+        target_groups = [
+            ("悩み", "trouble", ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]),
+            ("環境", "env", ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]),
+            ("生活", "life", ["ストレス・睡眠・食生活"])
         ]
 
-        for category, items in target_keys:
-            st.markdown(f"#### 【{category}】")
+        for cat_name, cat_id, items in target_groups:
+            st.markdown(f"#### 【{cat_name}】")
             for item in items:
-                # 既存データ取得
+                # 既存データ取得（分類とキーワードの両方で判定するとより安全）
                 existing = {}
                 if not df_master.empty:
-                    match = df_master[df_master["キーワード"] == item]
+                    match = df_master[(df_master["キーワード"] == item) & (df_master["分類"] == cat_name)]
                     if not match.empty:
                         existing = match.iloc[0].to_dict()
+                    elif not df_master[df_master["キーワード"] == item].empty:
+                        existing = df_master[df_master["キーワード"] == item].iloc[0].to_dict()
                 
                 c1, c2, c3 = st.columns([1, 2, 0.5])
                 with c1:
-                    ing_val = st.text_input(f"{item}：成分", value=existing.get("推奨成分", ""), key=f"in_v7_{item}")
+                    # ★重要：keyに cat_id を入れることで「悩みの乾燥」と「環境の乾燥」を別物にする
+                    ing_val = st.text_input(f"{item}：成分", value=existing.get("推奨成分", ""), key=f"in_v8_{cat_id}_{item}")
                 with c2:
-                    phr_val = st.text_input(f"フレーズ", value=existing.get("理由・ポップ用フレーズ", ""), key=f"ph_v7_{item}")
+                    phr_val = st.text_input(f"理由・フレーズ", value=existing.get("理由・ポップ用フレーズ", ""), key=f"ph_v8_{cat_id}_{item}")
                 with c3:
-                    # 話題の成分フラグ（チェックボックス）
-                    is_trend = st.checkbox("話題", value=(str(existing.get("話題の成分フラグ", "")) == "TRUE"), key=f"tr_v7_{item}")
+                    # 話題の成分フラグ
+                    is_trend = st.checkbox("話題", value=(str(existing.get("話題の成分フラグ", "")) == "TRUE"), key=f"tr_v8_{cat_id}_{item}")
                 
-                master_data_list.append([category, item, ing_val, phr_val, "TRUE" if is_trend else "FALSE"])
+                master_data_list.append([cat_name, item, ing_val, phr_val, "TRUE" if is_trend else "FALSE"])
             st.divider()
 
+        # フォームのインデント内でボタンを配置
         save_btn = st.form_submit_button("✅ この内容でマスタを保存する")
 
     # 保存処理
     if save_btn:
         with st.spinner("スプレッドシートを更新中..."):
             now_jst = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-            # 新しい列順：分類(A), キーワード(B), 推奨成分(C), 理由・ポップ用フレーズ(D), 更新日(E), 話題の成分フラグ(F)
             header = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "更新日", "話題の成分フラグ"]
             payload = [header]
             for d in master_data_list:
-                # d = [分類, キーワード, 推奨成分, フレーズ, フラグ]
-                # payload形式に並び替え
                 payload.append([d[0], d[1], d[2], d[3], now_jst, d[4]])
             
             sheet_master.clear()
             sheet_master.update("A1", payload)
-            st.success("マスタを更新しました！『話題の成分』設定も完了です。")
+            st.success("マスタを更新しました！『乾燥』の重複問題も解決済みです。")
             st.balloons()
 
 
