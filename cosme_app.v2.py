@@ -940,7 +940,7 @@ elif menu == "📈 アンケート分析":
 
                 df_compare = pd.concat([get_item_df(item_a), get_item_df(item_b)])
                 melted_compare = df_compare.melt(id_vars=["商品名"], var_name="項目", value_name="スコア")
-                melted_compare["スコア"] = pd.to_numeric(melted_compare["スコa"], errors='coerce')
+                melted_compare["スコア"] = pd.to_numeric(melted_compare["スコア"], errors='coerce')
 
                 import plotly.express as px
                 fig_box = px.box(melted_compare, x="項目", y="スコア", color="商品名", points="all", title=f"{item_a} vs {item_b} の分布")
