@@ -858,68 +858,69 @@ elif menu == "📚 商品カルテ一覧":
 
 elif menu == "🧪 成分マスタ編集":
     st.header("🧪 成分・悩みマスタ編集")
-    
+
+    # 1. 接続テストを先に行う
     try:
         client = get_gspread_client()
         sh = client.open("Cosme Data")
-        
-        # マスタ用シートの取得（なければ自動作成）
         try:
             sheet_master = sh.worksheet("ingredient_master")
         except:
-            sheet_master = sh.add_worksheet(title="ingredient_master", rows="100", cols="10")
+            sheet_master = sh.add_worksheet(title="ingredient_master", rows="100", cols="5")
             sheet_master.append_row(["分類", "キーワード", "推奨成分", "フレーズ", "更新日"])
-
+        
         records = sheet_master.get_all_records()
         df_master = pd.DataFrame(records)
+    except Exception as e:
+        st.error(f"接続エラー: {e}")
+        st.stop() # 接続できない場合はここで止める
 
-        # フォームの開始
-        with st.form(key="master_final_form"):
-            # データを溜めるリスト
-            master_data = []
-            
-            # 設定リスト
-            trouble_list = ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]
-            env_list = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
-            l_key = "ストレス・睡眠・食生活"
+    # 2. 確実に独立したフォームを作成
+    # 既存のフォームの影響を受けないよう、一意のkeyを割り当てます
+    master_form = st.form(key="independent_master_form_v5")
+    
+    with master_form:
+        st.subheader("🎯 推奨設定（成分と理由）")
+        master_data_list = []
+        
+        # 項目リスト
+        target_keys = [
+            ("悩み", ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]),
+            ("環境", ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]),
+            ("生活", ["ストレス・睡眠・食生活"])
+        ]
 
-            st.subheader("🎯 肌悩み・環境・生活の設定")
-
-            # 悩みと環境をまとめてループ
-            for k in trouble_list + env_list + [l_key]:
-                # 既存データの検索
-                row = df_master[df_master["キーワード"] == k].iloc[0] if not df_master.empty and k in df_master["キーワード"].values else {}
+        for category, items in target_keys:
+            st.markdown(f"**【{category}】**")
+            for item in items:
+                # 既存データ取得
+                existing = df_master[df_master["キーワード"] == item].iloc[0] if not df_master.empty and item in df_master["キーワード"].values else {}
                 
                 c1, c2 = st.columns([1, 2])
                 with c1:
-                    ing = st.text_input(f"【{k}】成分", value=row.get("推奨成分", ""), key=f"ing_v4_{k}")
+                    ing_val = st.text_input(f"{item}：成分", value=existing.get("推奨成分", ""), key=f"in_{item}")
                 with c2:
-                    phrase = st.text_input(f"推奨理由", value=row.get("フレーズ", ""), key=f"ph_v4_{k}")
+                    phr_val = st.text_input(f"{item}：理由", value=existing.get("フレーズ", ""), key=f"ph_{item}")
                 
-                # 分類を判定してリストに追加
-                cat = "悩み" if k in trouble_list else ("環境" if k in env_list else "ライフスタイル")
-                master_data.append([cat, k, ing, phrase])
+                master_data_list.append([category, item, ing_val, phr_val])
+            st.divider()
 
-            # ★【最重要】このボタンの「s」が、上の「for」や「c1」と同じ位置にあること！
-            submitted = st.form_submit_button("✅ マスタ内容を保存する")
+        # ★これがフォームの「出口」ボタンです
+        save_btn = st.form_submit_button("✅ この内容でマスタを保存する")
 
-        # --- ここからフォームの外 ---
-        if submitted:
-            with st.spinner("保存中..."):
-                now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-                header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
-                final_rows = [header]
-                for d in master_data:
-                    final_rows.append(d + [now_str])
-                
-                sheet_master.clear()
-                sheet_master.update("A1", final_rows)
-                st.success("スプレッドシートへの保存が完了しました！")
-                st.balloons()
+    # 3. ボタンが押された時の処理（フォームの外）
+    if save_btn:
+        with st.spinner("スプレッドシートを更新しています..."):
+            now_jst = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
+            header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
+            payload = [header] + [d + [now_jst] for d in master_data_list]
+            
+            sheet_master.clear()
+            sheet_master.update("A1", payload)
+            st.success("マスタの更新に成功しました！")
+            st.balloons()
+            
 
-    except Exception as e:
-        st.error(f"システムエラー: {e}")
-        
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
 
