@@ -263,101 +263,79 @@ with st.sidebar:
     )
 
     st.markdown("---")
-
-
     if df is not None:
-    # --- 共通の絞り込みフィルター ---
-        with st.expander("⚙️ データ絞り込み", expanded=True): # 最初は見せるためにTrueにしてみましょう
-           selected_theme = st.selectbox("📊 分析グラフのカラー", list(COLOR_PALETTES.keys()))
-           theme_colors = COLOR_PALETTES[selected_theme]
+       # --- 共通の絞り込みフィルター（すべてこの枠の中に統合） ---
+       with st.expander("⚙️ データ絞り込み", expanded=True):
+           col1, col2 = st.columns(2)
         
-           genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
-           conf = COLUMN_CONFIG[genre]
-        
-            # フィルター適用のロジックをここに全部書く
+           with col1:
+               selected_theme = st.selectbox("📊 分析グラフのカラー", list(COLOR_PALETTES.keys()))
+               theme_colors = COLOR_PALETTES[selected_theme]
+               genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="main_g")
+               conf = COLUMN_CONFIG[genre]
+
+            # 1. ジャンルで先にベースを作る
            sub_df = df[df[COL_GENRE] == genre].copy()
         
-           # 254行目付近の修正
-           type_col_name = conf.get("type_col", "アイテムタイプ")
+           with col2:
+            # アイテムタイプの選択
+            type_col_name = conf.get("type_col", "アイテムタイプ")
+            if type_col_name in sub_df.columns:
+                target_data = sub_df[type_col_name]
+                combined_series = target_data.stack() if isinstance(target_data, pd.DataFrame) else target_data
+                types = sorted(combined_series.dropna().unique())
+                selected_types = st.multiselect("アイテムタイプ", types)
+            else:
+                selected_types = []
 
-           if type_col_name in sub_df.columns:
-            # --- 修正：複数列あっても1つにまとめてユニーク値を取得 ---
-               target_data = sub_df[type_col_name]
-               if isinstance(target_data, pd.DataFrame):
-                # 複数列ある場合は縦に積み上げて1列にする
-                combined_series = target_data.stack()
-               else:
-                # 1列だけならそのまま
-                combined_series = target_data
-            
-               types = sorted(combined_series.dropna().unique())
-               selected_types = st.multiselect("アイテムタイプ", types)
-            # --------------------------------------------------
-           else:
-             st.warning(f"⚠️ 列 '{type_col_name}' がデータに見つかりません。")
-             st.write("現在の列名:", sub_df.columns.tolist())
-             selected_types = []
+       st.divider() # 区切り線
 
-        # 年代の選択
-        ages = sorted(sub_df[COL_AGE].unique())
-        selected_ages = st.multiselect("年代", ages, default=ages)
+        # 年代・性別・環境を横並びにする
+       c3, c4, c5 = st.columns(3)
+       with c3:
+            ages = sorted(sub_df[COL_AGE].unique())
+            selected_ages = st.multiselect("年代", ages, default=ages)
+       with c4:
+            genders = ["女性", "男性", "回答しない／その他"]
+            selected_genders = st.multiselect("性別", genders, default=genders)
+       with c5:
+            # --- 環境の絞り込み ---
+            col_env = "最近、ご自身が置かれている環境で気になることはありますか？"
+            env_options = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
+            selected_envs = st.multiselect("気になる環境", env_options)
 
-        genders = ["女性", "男性", "回答しない／その他"]
-        selected_genders = st.multiselect("性別", genders, default=genders)
+        # --- ライフスタイルの絞り込み ---
+       col_life = "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？"
+       life_threshold = st.select_slider(
+            "⚡ ライフスタイル負荷レベル（スコア以上を表示）",
+            options=[0, 1, 2, 3, 4, 5],
+            value=0
+        )
 
-          # --- フィルタ適用（1つずつ順番に絞り込む） ---
-
-# 1. 年齢で絞り込む
-if selected_ages:
-    sub_df = sub_df[sub_df[COL_AGE].isin(selected_ages)]
-
-# 2. アイテムタイプで絞り込む（列が存在し、かつ選択されている場合のみ）
-type_col = "アイテムタイプ"
-if type_col in sub_df.columns:
-    if selected_types:
-        sub_df = sub_df[sub_df[type_col].isin(selected_types)]
-
-# 3. 性別で絞り込む
-if selected_genders:
-    sub_df = sub_df[sub_df["性別"].isin(selected_genders)]
-
-
-
-with st.sidebar.expander("🌐 環境・ライフルタイル", expanded=False):
-    st.caption("全画面共通のデータ絞り込み")
+    # --- 実際のフィルタ適用ロジック（Expanderの外で実行） ---
+    # 1. 年齢
+    if selected_ages:
+        sub_df = sub_df[sub_df[COL_AGE].isin(selected_ages)]
     
-    col_env = "最近、ご自身が置かれている環境で気になることはありますか？"
-    col_life = "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？"
+    # 2. アイテムタイプ
+    if selected_types and type_col_name in sub_df.columns:
+        sub_df = sub_df[sub_df[type_col_name].isin(selected_types)]
     
-    # --- 1. 環境の絞り込み（乾燥を追加） ---
-    env_options = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
-    selected_envs = st.multiselect("気になる環境", env_options, key="sb_env_v2")
+    # 3. 性別
+    if selected_genders:
+        sub_df = sub_df[sub_df["性別"].isin(selected_genders)]
     
-    # --- 2. ライフスタイルの絞り込み ---
-    life_threshold = st.select_slider(
-        "ライフスタイル負荷(以上)",
-        options=[0, 1, 2, 3, 4, 5],
-        value=0,
-        key="sb_life_v2"
-    )
+    # 4. 環境（キーワード検索）
+    if selected_envs and col_env in sub_df.columns:
+        pattern = '|'.join(selected_envs)
+        sub_df = sub_df[sub_df[col_env].str.contains(pattern, na=False)]
+    
+    # 5. ライフスタイル（数値判定）
+    if life_threshold > 0 and col_life in sub_df.columns:
+        sub_df[col_life] = pd.to_numeric(sub_df[col_life], errors='coerce').fillna(0)
+        sub_df = sub_df[sub_df[col_life] >= life_threshold]
 
-    if df is not None:
-        filtered_df = df.copy()
-        
-        # 環境（キーワード検索）で絞り込み
-        if selected_envs and col_env in filtered_df.columns:
-            # 選択されたキーワード（乾燥など）が含まれる人を抽出
-            pattern = '|'.join(selected_envs)
-            filtered_df = filtered_df[filtered_df[col_env].str.contains(pattern, na=False)]
-        
-        # ライフスタイル（数値判定）で絞り込み
-        if life_threshold > 0 and col_life in filtered_df.columns:
-            filtered_df[col_life] = pd.to_numeric(filtered_df[col_life], errors='coerce').fillna(0)
-            filtered_df = filtered_df[filtered_df[col_life] >= life_threshold]
-        
-        st.write(f"📊 分析対象: **{len(filtered_df)}** 名")
-    else:
-        filtered_df = None
+    st.info(f"📊 現在の分析対象： **{len(sub_df)}** 名")
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
