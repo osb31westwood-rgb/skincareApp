@@ -819,6 +819,41 @@ elif menu == "📚 商品カルテ一覧":
             
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
+
+    # 列名の存在チェック
+    has_age = "年代" in sub_df.columns
+    has_gender = "性別" in sub_df.columns
+    has_skin = "肌悩み" in sub_df.columns
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if has_age:
+            f_age = st.multiselect("年代", sorted(sub_df["年代"].dropna().unique()), key="rev_age")
+        else:
+            st.caption("⚠️ '年代'列が見つかりません")
+            f_age = []
+            
+    with c2:
+        if has_gender:
+            f_gender = st.multiselect("性別", sorted(sub_df["性別"].dropna().unique()), key="rev_gender")
+        else:
+            st.caption("⚠️ '性別'列が見つかりません")
+            f_gender = []
+
+    with c3:
+        if has_skin:
+            f_skin = st.multiselect("肌悩み", sorted(sub_df["肌悩み"].dropna().unique()), key="rev_skin")
+        else:
+            f_skin = []
+
+    # フィルタリング処理（列が存在する場合のみ実行）
+    rev_df = sub_df.copy()
+    if f_age and has_age: 
+        rev_df = rev_df[rev_df["年代"].isin(f_age)]
+    if f_gender and has_gender: 
+        rev_df = rev_df[rev_df["性別"].isin(f_gender)]
+    if f_skin and has_skin:
+        rev_df = rev_df[rev_df["肌悩み"].apply(lambda x: any(s in str(x) for s in f_skin))]
     
     if sub_df.empty:
         st.warning("⚠️ 現在の絞り込み条件に一致するデータがありません。")
