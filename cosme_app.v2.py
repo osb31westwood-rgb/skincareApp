@@ -907,7 +907,7 @@ elif menu == "🧪 成分マスタ編集":
                 master_data.append(["環境", e, ing, phrase])
 
             st.markdown("---")
-            st.info("💡 ストレス・睡眠・食生活の合計スコアが高い人への設定")
+            st.info("💡 ライフスタイル（ストレス・睡眠・食生活）の設定")
             
             l_key = "ストレス・睡眠・食生活"
             col1, col2 = st.columns([1, 2])
@@ -915,23 +915,26 @@ elif menu == "🧪 成分マスタ編集":
             with col1:
                 ing_l = st.text_input("推奨成分", value=row_l.get("推奨成分", "CICA, ナイアシンアミド, パンテノール"), key="mst_lifestyle_all")
             with col2:
-                phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活の乱れから肌を守る"), key="ph_lifestyle_all")
+                phrase_l = st.text_input("推奨フレーズ", value=row_l.get("フレーズ", "生活リズムの乱れから肌を守る"), key="ph_lifestyle_all")
             master_data.append(["ライフスタイル", l_key, ing_l, phrase_l])
 
-            # ★ここが重要！フォームの中にボタンを入れる
+            # ★ここが重要！フォームの最後に専用の送信ボタンを置く
             submitted = st.form_submit_button("✅ マスタ内容をスプレッドシートに保存")
 
-        # フォームの外で、ボタンが押された時の処理を書く
+        # フォームの外で、ボタンが押された時の保存処理を書く
         if submitted:
-            now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-            sheet_master.clear()
-            header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
-            final_rows = [header]
-            for row in master_data:
-                final_rows.append(row + [now_str])
-            
-            sheet_master.update("A1", final_rows)
-            st.success("マスタを更新しました！")
+            with st.spinner("マスタを保存中..."):
+                now_str = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
+                
+                # A1セルからヘッダー込みで一気に上書き
+                header = ["分類", "キーワード", "推奨成分", "フレーズ", "更新日"]
+                final_rows = [header]
+                for row in master_data:
+                    final_rows.append(row + [now_str])
+                
+                sheet_master.clear() # 一旦クリア
+                sheet_master.update("A1", final_rows)
+                st.success("成分マスタを更新しました！これで最新の成分マスタが反映されます。")
 
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
