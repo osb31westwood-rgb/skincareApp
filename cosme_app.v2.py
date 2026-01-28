@@ -321,6 +321,27 @@ if type_col in sub_df.columns:
 if selected_genders:
     sub_df = sub_df[sub_df["性別"].isin(selected_genders)]
 
+# --- 4. 環境・ライフスタイルの絞り込み ---
+        # 質問項目をリスト化（アンケートの列名と完全に一致させてください）
+        env_questions = ["日差し・紫外線を浴びる機会が多い", "乾燥を感じる環境にいることが多い", "湿気によるべたつき・蒸れが気になる", "マスクや衣類による摩擦が多い"]
+        lifestyle_questions = ["ストレスを感じることが多い", "睡眠不足を感じることが多い", "食生活が乱れがちである"]
+
+        st.markdown("---")
+        st.caption("🌿 環境・ライフスタイルで絞り込む")
+        
+        # マルチセレクトで「当てはまる項目」を選択
+        selected_env_life = st.multiselect(
+            "特定の条件に該当する人のみ表示（複数選択可）",
+            env_questions + lifestyle_questions
+        )
+
+        # フィルタ適用：選択された項目が「はい（または高いスコア）」の人を抽出
+        if selected_env_life:
+            for q in selected_env_life:
+                if q in sub_df.columns:
+                    # アンケートが 1〜5 の数値の場合：3以上を「該当」とする例
+                    sub_df = sub_df[sub_df[q] >= 3]
+                    # もし「はい/いいえ」形式なら：sub_df = sub_df[sub_df[q] == "はい"] に書き換え
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
