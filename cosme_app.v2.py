@@ -325,42 +325,43 @@ if selected_genders:
 
 st.sidebar.markdown("---") # 区切り線
 
-# サイドバーの一番下に折りたたみ（expander）で配置
-with st.sidebar.expander("🌐 共通分析フィルター", expanded=False):
+# --- サイドバーの最下部に追記 ---
+
+st.sidebar.markdown("---") 
+
+with st.sidebar.expander("🌐 環境・ライフルタイル", expanded=False):
     st.caption("全画面共通のデータ絞り込み")
     
-    # アンケートの列名
     col_env = "最近、ご自身が置かれている環境で気になることはありますか？"
     col_life = "ライフスタイルでストレス・睡眠・食生活など、気になることはありますか？"
     
-    # 1. 環境の絞り込み
-    env_options = ["日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
-    selected_envs = st.multiselect("気になる環境", env_options, key="sb_env")
+    # --- 1. 環境の絞り込み（乾燥を追加） ---
+    env_options = ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]
+    selected_envs = st.multiselect("気になる環境", env_options, key="sb_env_v2")
     
-    # 2. ライフスタイルの絞り込み
+    # --- 2. ライフスタイルの絞り込み ---
     life_threshold = st.select_slider(
         "ライフスタイル負荷(以上)",
         options=[0, 1, 2, 3, 4, 5],
         value=0,
-        key="sb_life"
+        key="sb_life_v2"
     )
 
-    # --- 絞り込みロジックの適用 ---
-    # ここで sub_df を作っておくと、各メニュー内でこれを使えます
     if df is not None:
         filtered_df = df.copy()
         
-        # 環境で絞り込み
+        # 環境（キーワード検索）で絞り込み
         if selected_envs and col_env in filtered_df.columns:
+            # 選択されたキーワード（乾燥など）が含まれる人を抽出
             pattern = '|'.join(selected_envs)
             filtered_df = filtered_df[filtered_df[col_env].str.contains(pattern, na=False)]
         
-        # ライフスタイルで絞り込み
+        # ライフスタイル（数値判定）で絞り込み
         if life_threshold > 0 and col_life in filtered_df.columns:
             filtered_df[col_life] = pd.to_numeric(filtered_df[col_life], errors='coerce').fillna(0)
             filtered_df = filtered_df[filtered_df[col_life] >= life_threshold]
         
-        st.write(f"📊 対象者: **{len(filtered_df)}** 名")
+        st.write(f"📊 分析対象: **{len(filtered_df)}** 名")
     else:
         filtered_df = None
 
@@ -934,7 +935,7 @@ elif menu == "🧪 成分マスタ編集":
         target_groups = [
             ("悩み", "trouble", ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]),
             ("環境", "env", ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]),
-            ("生活", "life", ["ストレス・睡眠・食生活"])
+            ("ライフスタイル", "life", ["ストレス・睡眠・食生活"])
         ]
 
         for cat_name, cat_id, items in target_groups:
