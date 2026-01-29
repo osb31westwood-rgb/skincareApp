@@ -1125,21 +1125,21 @@ elif menu == "📚 成分マスタ一覧":
                                         st.write(f"**【推奨成分】** : {row['推奨成分']}")
                                         st.info(f"**【解説】** : \n{row['理由・ポップ用フレーズ']}")
                                         
-                                        # --- 商品連携 & 絞り込みセクション ---
-                                        target_ing = row['推奨成分']
-                                        # その成分を含む商品を抽出
-                                        matched_prods = df_karte[df_karte["全成分"].astype(str).str.contains(target_ing, na=False)]
+                                    # --- 商品連携 & 絞り込みセクション ---
+                                    target_ing = row['推奨成分']
+                                    # その成分を含む商品を抽出
+                                    matched_prods = df_karte[df_karte["全成分"].astype(str).str.contains(target_ing, na=False)]
                                         
-                                        if not matched_prods.empty:
+                                    if not matched_prods.empty:
                                             st.markdown(f"---")
                                             st.write(f"🛍️ **{target_ing}** 配合商品の絞り込み")
                                             
                                             c1, c2 = st.columns(2)
-                                            with c1:
+                                    with c1:
                                                 # ジャンルで絞り込み
                                                 gen_list = ["すべて"] + sorted(matched_prods["ジャンル"].unique().tolist())
                                                 sel_gen = st.selectbox("ジャンル", gen_list, key=f"gen_{row['キーワード']}")
-                                            with c2:
+                                    with c2:
                                                 # ジャンルが選ばれていたら、そのジャンル内のアイテムタイプのみ表示
                                                 temp_df = matched_prods if sel_gen == "すべて" else matched_prods[matched_prods["ジャンル"] == sel_gen]
                                                 type_list = ["すべて"] + sorted(temp_df["アイテムタイプ"].unique().tolist())
