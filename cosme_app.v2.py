@@ -383,90 +383,91 @@ with st.sidebar:
 
     # --- 各メニュー機能 ---
 if menu == "📲 アンケートQR生成":
-    st.header("📲 アンケート回答用QR作成")
+        st.header("📲 アンケート回答用QR作成")
         
-        # 既存の商品名リストを取得するためにカルテを読み込む
-    try:
-        client = get_gspread_client()
-        sh = client.open("Cosme Data")
-        sheet_k = sh.worksheet("カルテ")
-        df_karte = pd.DataFrame(sheet_k.get_all_records())
-    except:
-        df_karte = pd.DataFrame()
+        # --- データの読み込み ---
+        try:
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet_k = sh.worksheet("カルテ")
+            records = sheet_k.get_all_records()
+            df_karte = pd.DataFrame(records) if records else pd.DataFrame()
+        except Exception as e:
+            st.error(f"データ読み込みエラー: {e}")
+            df_karte = pd.DataFrame()
 
-        # 1. ジャンルとタイプの選択
-        q_genre = st.selectbox("ジャンル", list(COLUMN_CONFIG.keys()), key="qr_g")
-        q_type = st.selectbox("アイテムタイプを選択", COLUMN_CONFIG[q_genre]["types"], key="qr_t")
+        # --- 入力エリア ---
+        q_genre = st.selectbox("✨ ジャンル", list(COLUMN_CONFIG.keys()), key="qr_g")
         
-        # 2. 商品名の選択（既存から選ぶ or 新規入力）
+        # ジャンルに基づいたアイテムタイプ
+        types_list = COLUMN_CONFIG[q_genre]["types"]
+        q_type = st.selectbox("🏷️ アイテムタイプを選択", types_list, key="qr_t")
+        
         st.markdown("---")
-        input_method = st.radio("商品名の指定方法", ["既存の商品から選ぶ", "新しく入力する"], horizontal=True)
+        input_method = st.radio("🎁 商品名の指定方法", ["既存の商品から選ぶ", "新しく入力する"], horizontal=True)
         
+        q_item = "" # 初期化
         if input_method == "既存の商品から選ぶ" and not df_karte.empty:
-            # 現在選んでいるジャンル/タイプに合致する商品をリストアップ
-            filtered_names = df_karte[
-                (df_karte["ジャンル"].astype(str).str.contains(q_genre, na=False)) & 
+            # 選択中のジャンルやタイプが含まれる商品を抽出
+            filtered_df = df_karte[
+                (df_karte["ジャンル"].astype(str).str.contains(q_genre, na=False)) &
                 (df_karte["アイテムタイプ"].astype(str).str.contains(q_type, na=False))
-            ]["商品名"].unique().tolist()
+            ]
+            filtered_names = sorted(filtered_df["商品名"].unique().tolist())
             
             if filtered_names:
-                q_item = st.selectbox("商品名を選択", sorted(filtered_names), key="qr_i_select")
+                q_item = st.selectbox("商品名を選択", filtered_names, key="qr_i_select")
             else:
-                st.warning("該当する商品がカルテにありません。直接入力してください。")
+                st.caption("⚠️ 該当する商品がありません。直接入力してください。")
                 q_item = st.text_input("商品名を入力（直接）", key="qr_i_manual")
         else:
             q_item = st.text_input("商品名を入力", key="qr_i_new")
 
-        if st.button("QRコードを発行"):
+        # --- QR発行ボタン ---
+        if st.button("🚀 QRコードを発行", key="generate_qr_btn"):
             if not q_item:
-                st.error("商品名が指定されていません。")
+                st.warning("商品名を入力または選択してください。")
             else:
-                with st.spinner("URLを短縮してQRコードを生成中..."):
-                    # パラメータ作成
-                    type_id = COLUMN_CONFIG[q_genre]["form_id"]
-                    params = urllib.parse.urlencode({
-                        "entry.500746217": q_genre, 
-                        type_id: q_type, 
-                        "entry.1507235458": q_item
-                    })
-                    full_url = f"https://docs.google.com/forms/d/e/1FAIpQLSdBubITUy2hWaM8z9Ryo4QV6qKF0A1cnUnFEM49E6tdf8JeXw/viewform?usp=pp_url&{params}"
-                    
-                    # --- 短縮URLの生成 (TinyURL利用) ---
-                    try:
+                try:
+                    with st.spinner("URL短縮中..."):
+                        # パラメータ作成
+                        form_id = COLUMN_CONFIG[q_genre].get("form_id", "")
+                        params = urllib.parse.urlencode({
+                            "entry.500746217": q_genre, 
+                            form_id: q_type, 
+                            "entry.1507235458": q_item
+                        })
+                        
+                        base_url = "https://docs.google.com/forms/d/e/1FAIpQLSdBubITUy2hWaM8z9Ryo4QV6qKF0A1cnUnFEM49E6tdf8JeXw/viewform"
+                        full_url = f"{base_url}?usp=pp_url&{params}"
+                        
+                        # TinyURLで短縮
                         api_url = f"http://tinyurl.com/api-create.php?url={urllib.parse.quote(full_url)}"
-                        short_url = requests.get(api_url).text
-                    except:
-                        short_url = full_url # 失敗時は元のURLを使用
+                        short_url = requests.get(api_url, timeout=5).text
+                        
+                        # QRコード作成
+                        qr = qrcode.QRCode(box_size=10, border=4)
+                        qr.add_data(short_url)
+                        qr.make(fit=True)
+                        img = qr.make_image(fill_color="black", back_color="white")
+                        
+                        buf = BytesIO()
+                        img.save(buf, format="PNG")
+                        byte_im = buf.getvalue()
 
-                    # QRコード生成
-                    qr = qrcode.QRCode(
-                        version=1,
-                        error_correction=qrcode.constants.ERROR_CORRECT_L, # 短縮URLならL(低)でドットが大きく読みやすくなる
-                        box_size=10,
-                        border=4,
-                    )
-                    qr.add_data(short_url)
-                    qr.make(fit=True)
-                    
-                    img_qr = qr.make_image(fill_color="black", back_color="white")
-                    buf = BytesIO()
-                    img_qr.save(buf, format="PNG")
-                    byte_im = buf.getvalue()
-
-                    # 表示
-                    st.success("✅ QRコードを作成しました")
-                    st.image(byte_im, width=250, caption=f"【{q_item}】アンケート用")
-                    
-                    st.markdown("#### 📄 短縮済みURL")
-                    st.code(short_url, language="text")
-
-                    st.download_button(
-                        label="📥 QRコードを保存",
-                        data=byte_im,
-                        file_name=f"QR_{q_item}.png",
-                        mime="image/png",
-                        key="download_qr"
-                    )
+                        # 結果表示
+                        st.success("✅ 生成完了！")
+                        st.image(byte_im, width=250)
+                        st.code(short_url, language="text")
+                        
+                        st.download_button(
+                            label="📥 画像を保存",
+                            data=byte_im,
+                            file_name=f"QR_{q_item}.png",
+                            mime="image/png"
+                        )
+                except Exception as e:
+                    st.error(f"QR生成中にエラーが発生しました: {e}")
             # ------------------------ 
 elif menu == "✨ AIポップ作成":
         st.header("✨ AIポップ案制作")
