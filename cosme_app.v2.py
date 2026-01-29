@@ -701,33 +701,49 @@ elif menu == "✨ AIポップ作成":
                 
                                            
                         # --- プロンプトの構築（ジャンルとタイプを追加） ---
-                        # saved_recordsから現在の商品のジャンルとタイプを特定
+
+                        # 1. ここに設置！追加指示が空の場合のデフォルト設定
+                        if not human_hint:
+                            human_hint = "親しみやすく、かつプロフェッショナルな雰囲気"
+
+                        # 2. saved_recordsから現在の商品の情報を特定（既存のコード）
                         current_item_data = next((row for row in saved_records if str(row.get('商品名')) == str(selected_item)), {})
                         item_genre = current_item_data.get('ジャンル', '不明')
                         item_type = current_item_data.get('アイテムタイプ', '不明')
 
-                        prompt = f"""
-                        あなたはこの化粧品を販売するプロのPOPライターです。
-                        {'添付画像からパッケージの色味やデザインの雰囲気を読み取り、' if image_data else ''}
-                        以下の情報と顧客分析を組み合わせて、思わず手に取りたくなる店頭POP用キャッチコピーを3案提案してください。
+                        # 3. NGワードをテキスト化
+                        ng_rules_text = ""
+                        if ng_dict:
+                            for word, reason in ng_dict.items():
+                                ng_rules_text += f"・{word}（理由: {reason}）\n"
+                        else:
+                            ng_rules_text = "薬機法を遵守すること"
 
-                        【最重要】薬機法（化粧品広告ガイドライン）を遵守し、治療効果や「最高」等の誇大表現は避けてください。
+                        # 4. プロンプトを作成（ここから差し替え）
+                        prompt = f"""
+                        あなたは化粧品販売のプロであり、売れっ子のPOPライターです。
+                        {'添付画像からデザインの雰囲気を読み取り、' if image_data else ''}
+                        以下の情報から、思わず手に取りたくなる店頭POP案を3案提案してください。
+
+                        【最重要】薬機法を遵守し、治療効果や「最高」等の誇大表現は避けてください。
+
                         商品名: {selected_item}
-                        カテゴリー: {item_genre} （{item_type}） # ←ここを追加！
+                        カテゴリー: {item_genre} （{item_type}）
+                        トーン: {human_hint} # ← ここに反映されます
                         特徴: {input_info}
-                        要望: {human_hint}
-                        ターゲット層: {gender_target}
                         分析結果: {analysis_hint}
-                        
-                        【出力ルール】:
-                        - {item_type}としての役割（保湿、発色、香りなど）を活かした表現にすること
-                        - パッケージの雰囲気に合う言葉選びをすること
-                        - ターゲットの心に刺さる強い言葉を1つ入れること
-                        # 制約事項:
-                        - 「はい、かしこまりました」や「提案します」などの前置き・挨拶は一切不要です。
-                        - 案の番号とコピーの内容だけを出力してください。
-                        - 1つは成分のメリット、1つは肌の悩み解決、1つは使用感を重視してください。
-                        """
+
+                        【⚠️ 絶対に使用禁止のNGワード】
+                        {ng_rules_text}
+
+                        【出力ルール】
+                        ・案◯
+                         【タイトル】20文字前後
+                          【本文】100文字前後
+                         ・1つは成分メリット、1つは悩み解決、1つは使用感を重視すること。
+                         ・挨拶、解説、前書きは一切禁止。案のみを出力してください。
+                         ・情報が少ない場合でも「情報が足りない」等の言い訳はせず、美容知識で「いい感じに」補完すること。
+                         """
 
                         # --- Geminiへのリクエスト (画像があればリスト形式で渡す) ---
                         if image_data:
@@ -1129,26 +1145,26 @@ elif menu == "📚 成分マスタ一覧":
                                                 type_list = ["すべて"] + sorted(temp_df["アイテムタイプ"].unique().tolist())
                                                 sel_type = st.selectbox("アイテムタイプ", type_list, key=f"type_{row['キーワード']}")
                                             
-                                            # 最終的な表示用リスト
-                                            final_df = temp_df if sel_type == "すべて" else temp_df[temp_df["アイテムタイプ"] == sel_type]
+                # 最終的な表示用リスト
+                final_df = temp_df if sel_type == "すべて" else temp_df[temp_df["アイテムタイプ"] == sel_type]
                                             
-                                            if not final_df.empty:
-                                                prod_list = final_df["商品名"].tolist()
-                                                selected_prod = st.selectbox(f"該当商品 ({len(prod_list)}件)", ["選択してください"] + prod_list, key=f"final_{row['キーワード']}")
+                if not final_df.empty:
+                    prod_list = final_df["商品名"].tolist()
+                    selected_prod = st.selectbox(f"該当商品 ({len(prod_list)}件)", ["選択してください"] + prod_list, key=f"final_{row['キーワード']}")
                                                 
-                                                if selected_prod != "選択してください":
-                                                    p_data = final_df[final_df["商品名"] == selected_prod].iloc[0]
-                                                    st.success(f"**{selected_prod}**\n\n{p_data['公式情報'][:100]}...")
-                                            else:
-                                                st.warning("条件に合う商品がありません")
-                                        else:
-                                            st.caption("現在、この成分を含む商品は登録されていません。")
-                        else:
-                            st.info("データがありません。")
+                    if selected_prod != "選択してください":
+                        p_data = final_df[final_df["商品名"] == selected_prod].iloc[0]
+                        st.success(f"**{selected_prod}**\n\n{p_data['公式情報'][:100]}...")
+                    else:
+                        st.warning("条件に合う商品がありません")
+                else:
+                     st.caption("現在、この成分を含む商品は登録されていません。")
+            else:
+                 st.info("データがありません。")
 
                 # --- 4. 全データ確認 ---
-                st.divider()
-                with st.expander("🛠️ 全マスタデータを表形式で確認"):
+                 st.divider()
+            with st.expander("🛠️ 全マスタデータを表形式で確認"):
                     st.dataframe(df_master, use_container_width=True, hide_index=True)
 
         except Exception as e:
