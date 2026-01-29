@@ -862,66 +862,77 @@ elif menu == "📋 商品カルテ編集":
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
 
-elif menu == "📚 商品カルテ一覧":
-    st.header("📋 登録済み商品カルテ一覧")
-    try:
-        client = get_gspread_client()
-        sh = client.open("Cosme Data")
-        sheet_karte = sh.worksheet("カルテ")
-        records = sheet_karte.get_all_records()
+elif menu == "📋 商品カルテ一覧":
+        st.header("📋 商品カルテ・アーカイブ")
+        try:
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
+            sheet_karte = sh.worksheet("カルテ")
+            records = sheet_karte.get_all_records()
 
-        if records:
-            df_karte = pd.DataFrame(records)
-            st.subheader("📊 全商品アーカイブ")
-            
-            # --- 表に表示する列（全成分は詳細で見せるため、ここでは省略） ---
-            cols = ["新規", "更新", "作成者", "ジャンル", "アイテムタイプ", "商品名", "ポップ案"]
-            display_cols = [c for c in cols if c in df_karte.columns]
-            st.dataframe(df_karte[display_cols], use_container_width=True)
+            if records:
+                df_karte = pd.DataFrame(records)
 
-            st.markdown("---")
-            st.subheader("🔍 商品別・詳細アーカイブ")
-            item_list = [n for n in df_karte["商品名"].unique() if n]
-            
-            if item_list:
-                target_item = st.selectbox("詳しく見たい商品を選択", item_list, key="karte_pro_select")
-                item_data = df_karte[df_karte["商品名"] == target_item].iloc[-1]
+                # --- 1. 🔍 商品別・詳細アーカイブ ---
+                st.subheader("🔍 商品別・詳細アーカイブ")
                 
-                c1, c2, c3 = st.columns([1, 1.2, 1.2])
-                
-                with c1:
-                    st.write("📸 **商品画像**")
-                    img_url = item_data.get("画像URL", "")
-                    if img_url:
-                        st.image(img_url, use_container_width=True, caption=target_item)
-                    else:
-                        st.info("画像なし")
+                # 検索と絞り込み
+                c_f1, c_f2 = st.columns(2)
+                with c_f1:
+                    sel_gen = st.selectbox("ジャンル絞り込み", ["すべて"] + sorted(df_karte["ジャンル"].unique().tolist()), key="arch_gen")
+                with c_f2:
+                    temp_df = df_karte if sel_gen == "すべて" else df_karte[df_karte["ジャンル"] == sel_gen]
+                    sel_type = st.selectbox("タイプ絞り込み", ["すべて"] + sorted(temp_df["アイテムタイプ"].unique().tolist()), key="arch_type")
 
-                with c2:
-                    st.markdown(f"### 🏷️ {target_item}")
-                    gen = item_data.get('ジャンル', '---')
-                    typ = item_data.get('アイテムタイプ', '---')
-                    st.markdown(f"**分類:** `{gen}` / `{typ}`")
-                    
-                    st.info(f"**📖 公式情報:**\n\n{item_data.get('公式情報', '未登録')}")
-                    
-                    # --- ★追加：全成分の表示 ---
-                    # 全成分は長い場合が多いので、expand（折りたたみ）にするか、そのまま表示するか選べます
-                    with st.expander("🧪 全成分を表示", expanded=False):
-                        st.write(item_data.get('全成分', '未登録'))
-                    
-                    st.warning(f"**📝 スタッフメモ:**\n\n{item_data.get('メモ', 'なし')}")
+                # 最終候補の商品リスト
+                final_filter_df = temp_df if sel_type == "すべて" else temp_df[temp_df["アイテムタイプ"] == sel_type]
+                item_names = sorted(final_filter_df["商品名"].unique().tolist())
                 
-                with c3:
-                    st.success(f"**🤖 AI提案コピー:**\n\n{item_data.get('AIコピー', '未登録')}")
-                    st.success(f"**✨ 決定ポップ案:**\n\n{item_data.get('ポップ案', '未作成')}")
-                    st.caption(f"作成者: {item_data.get('作成者', '---')}")
-                    st.caption(f"最終更新: {item_data.get('更新', '---')}")
-        else:
-            st.info("まだカルテが登録されていません。")
+                selected_item = st.selectbox("表示する商品を選択してください", ["未選択"] + item_names)
 
-    except Exception as e:
-        st.error(f"表示エラー: {e}")
+                if selected_item != "未選択":
+                    # 選択された商品の詳細カードを表示
+                    row = final_filter_df[final_filter_df["商品名"] == selected_item].iloc[0]
+                    st.markdown("---")
+                    col_img, col_det = st.columns([1, 2])
+                    with col_img:
+                        if row.get("画像URL"):
+                            st.image(row["画像URL"], use_container_width=True)
+                        else:
+                            st.info("No Image")
+                    with col_det:
+                        st.title(row["商品名"])
+                        st.write(f"**カテゴリー:** {row['ジャンル']} / {row['アイテムタイプ']}")
+                        st.write(f"**最終更新:** {row['更新']}")
+                    
+                    st.markdown("#### 🧪 全成分")
+                    st.write(row["全成分"])
+                    
+                    st.markdown("#### 📖 公式情報")
+                    st.info(row["公式情報"])
+                    
+                    if row.get("メモ"):
+                        st.warning(f"💡 **スタッフメモ**\n\n{row['メモ']}")
+                
+                st.markdown("<br><br>", unsafe_allow_html=True)
+                st.divider()
+
+                # --- 2. 📊 全商品アーカイブ ---
+                st.subheader("📊 全商品アーカイブ")
+                st.caption("登録されている全データを一覧で確認・比較できます。")
+                
+                # 全データを表形式で表示（検索・ソート可能）
+                st.dataframe(
+                    df_karte[["更新", "ジャンル", "アイテムタイプ", "商品名", "全成分", "公式情報"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            else:
+                st.info("まだカルテが登録されていません。")
+
+        except Exception as e:
+            st.error(f"⚠️ 読み込みエラー: {e}")
 
 elif menu == "🧪 成分マスタ一覧":
         st.header("🧪 登録済み成分・悩みマスタ")
