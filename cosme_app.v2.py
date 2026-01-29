@@ -705,19 +705,14 @@ elif menu == "📋 商品カルテ編集":
     st.header("📋 商品カルテ：編集・管理")
 
     try:
-        # スプレッドシートへの接続
         client = get_gspread_client()
         sh = client.open("Cosme Data")
         sheet_karte = sh.worksheet("カルテ")
-        
-        # データを取得して DataFrame に変換
         records = sheet_karte.get_all_records()
-        
-        # ★ここで確実に df_karte を定義する！
+            
         if records:
             df_karte = pd.DataFrame(records)
         else:
-            # データが1件もない場合の空の器を作る（列名だけ定義）
             df_karte = pd.DataFrame(columns=[
                 "新規", "更新", "作成者", "ジャンル", "アイテムタイプ", 
                 "商品名", "全成分", "公式情報", "AIコピー/ポップ案", "メモ", "画像URL"
@@ -725,60 +720,64 @@ elif menu == "📋 商品カルテ編集":
 
         mode = st.radio("作業を選択してください", ["既存データから選んで編集", "新規カルテ作成"], horizontal=True)
 
-        # --- ★重要：ここで全ての変数に初期値をセットする（エラー防止） ---
+        # 初期値セット
         target_item_name = ""
         official_info_val = ""
         memo_val = ""
-        author_val = st.session_state.get("user_name", "") # ログイン名があれば入れる
+        author_val = st.session_state.get("user_name", "")
         base_date = ""
         current_img_url = ""
         current_gen = ""
         current_type = ""
         current_ingredients = ""
-        latest_row = {} # 空の辞書として初期化
+        latest_row = {}
 
-        # 既存編集の場合のみ、上記に値を上書きする
         if mode == "既存データから選んで編集" and not df_karte.empty:
             item_list = [n for n in df_karte["商品名"].unique() if n]
             if item_list:
-                selected_name = st.selectbox("編集する商品を選択", item_list, key="edit_item_select")
-                
-                # 選択された商品の最新行を取得
+                selected_name = st.selectbox("編集する商品を選択", item_list)
                 target_rows = df_karte[df_karte["商品名"] == selected_name]
                 if not target_rows.empty:
                     latest_row = target_rows.iloc[-1]
-                    
                     target_item_name = selected_name
                     official_info_val = latest_row.get("公式情報", "")
                     memo_val = latest_row.get("メモ", "")
                     author_val = latest_row.get("作成者", "")
                     base_date = latest_row.get("新規", "")
                     current_img_url = latest_row.get("画像URL", "")
-                    current_gen = latest_row.get("ジャンル", "")
-                    current_type = latest_row.get("アイテムタイプ", "")
+                    current_gen = str(latest_row.get("ジャンル", ""))
+                    current_type = str(latest_row.get("アイテムタイプ", ""))
                     current_ingredients = latest_row.get("全成分", "")
 
-
-       # --- 入力エリアのレイアウト修正 ---
         st.markdown("---")
         st.markdown("### 📝 カルテ入力")
-        
-        col_info1, col_info2, col_info3 = st.columns([2, 2, 1])
+            
+        col_info1, col_info2 = st.columns(2)
+            
         with col_info1:
-            gen_idx = list(COLUMN_CONFIG.keys()).index(current_gen) if current_gen in COLUMN_CONFIG else 0
-            main_cat = st.selectbox("✨ ジャンル", list(COLUMN_CONFIG.keys()), index=gen_idx)
+            # --- ジャンルの複数選択 ---
+            gen_master = list(COLUMN_CONFIG.keys())
+            # 既存値が「A / B」形式の場合に対応
+            default_gen = [g.strip() for g in current_gen.split("/") if g.strip() in gen_master]
+            selected_gens = st.multiselect("✨ ジャンル（複数選択可）", gen_master, default=default_gen)
+            # 保存用文字列
+            main_cat = " / ".join(selected_gens)
+
         with col_info2:
-            types = COLUMN_CONFIG[main_cat]["types"]
-            type_idx = types.index(current_type) if current_type in types else 0
-            sub_cat = st.selectbox("🏷️ アイテムタイプ", types, index=type_idx)
-        with col_info3:
-            edit_author = st.text_input("✍️ 作成者", value=author_val)
+            # --- アイテムタイプの複数選択（選択した全ジャンルから候補を出す） ---
+            type_master = []
+            for g in selected_gens:
+                type_master.extend(COLUMN_CONFIG[g]["types"])
+            type_master = sorted(list(set(type_master))) # 重複削除してソート
+                
+            default_type = [t.strip() for t in current_type.split("/") if t.strip() in type_master]
+            selected_types = st.multiselect("🏷️ アイテムタイプ（複数選択可）", type_master, default=default_type)
+            # 保存用文字列
+            sub_cat = " / ".join(selected_types)
 
+        edit_author = st.text_input("✍️ 作成者", value=author_val)
         edit_item_name = st.text_input("🎁 商品名", value=target_item_name)
-
-        # 【追加】全成分の入力欄
-        current_ingredients = latest_row.get("全成分", "") if mode == "既存データから選んで編集" else ""
-        edit_ingredients = st.text_area("🧪 全成分", value=current_ingredients, placeholder="・ビタミンC・レチノール...（配合量順に・で区切る）", height=100)
+        edit_ingredients = st.text_area("🧪 全成分", value=current_ingredients, placeholder="・成分A・成分B...", height=100)
 
         col_text1, col_text2 = st.columns(2)
         with col_text1:
@@ -786,83 +785,51 @@ elif menu == "📋 商品カルテ編集":
         with col_text2:
             edit_memo = st.text_area("💡 スタッフメモ・備考", value=memo_val, height=150)
 
-       # --- 画像セクション ---
+        # --- 画像セクション ---
         st.subheader("📸 商品画像")
-        
-        # 保存ボタンの外側で変数を初期化
         delete_image = False
-        uploaded_file = None
-
         if current_img_url:
-            st.image(current_img_url, caption="現在登録されている画像", width=200)
-            # 変数の定義
+            st.image(current_img_url, caption="現在の画像", width=200)
             delete_image = st.checkbox("🗑️ この画像を削除する")
-        
-        # 変数の定義
-        uploaded_file = st.file_uploader("新しい画像を選択（上書き）", type=["jpg", "jpeg", "png"])
+        uploaded_file = st.file_uploader("新しい画像をアップロード", type=["jpg", "jpeg", "png"])
 
-        st.markdown("---")
-
-        # 保存ボタン
         if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
-            if not edit_item_name:
-                st.error("商品名を入力してください。")
+            if not edit_item_name or not selected_gens or not selected_types:
+                st.error("商品名、ジャンル、アイテムタイプは必須です。")
             else:
                 with st.spinner("データを保存中..."):
-                    # 時間の設定（JST）
                     now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
                     now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
                     final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
 
-                    # 画像URLの確定
                     if delete_image: new_image_url = ""
                     elif uploaded_file:
                         res_url = upload_to_imgbb(uploaded_file)
                         new_image_url = res_url if res_url else current_img_url
                     else: new_image_url = current_img_url
 
-                    # --- 【修正ポイント】列の順番をスプレッドシートに厳密に合わせる ---
-                    # A:新規, B:更新, C:作成者, D:ジャンル, E:タイプ, F:商品名, G:全成分, H:公式情報, I:AIコピー, J:メモ, K:画像URL
                     new_row = [
-                        str(final_base_date),   # A
-                        now_str,                # B
-                        edit_author,            # C
-                        main_cat,               # D
-                        sub_cat,                # E
-                        edit_item_name,         # F
-                        edit_ingredients,       # G (全成分)
-                        edit_official_info,     # H (公式情報)
-                        "",                     # I (AIコピー)
-                        edit_memo,              # J
-                        new_image_url           # K
-                    ]
+                    str(final_base_date), now_str, edit_author, main_cat, sub_cat,
+                    edit_item_name, edit_ingredients, edit_official_info, "", edit_memo, new_image_url
+                ]
 
-                    # --- 保存・更新処理 ---
-                    # 最新のデータを再取得
                     all_records = sheet_karte.get_all_records()
                     df_all = pd.DataFrame(all_records)
 
-                    # 既に同じ商品名がある場合は「更新」、ない場合は「新規追加」
                     if not df_all.empty and edit_item_name in df_all["商品名"].values:
-                        # 既存行の特定（商品名で検索）
                         matching_rows = df_all[df_all["商品名"] == edit_item_name]
-                        row_index = matching_rows.index[0] + 2 # ヘッダー分+1、0始まり+1で合計+2
-                        
-                        # 新規作成日(A列)は元の値を維持
-                        if "新規" in df_all.columns:
-                            new_row[0] = str(matching_rows.iloc[0]["新規"])
-                        
-                        # A列からK列までを一気に更新
+                        row_index = matching_rows.index[0] + 2
+                        new_row[0] = str(matching_rows.iloc[0]["新規"])
                         sheet_karte.update(range_name=f"A{row_index}:K{row_index}", values=[new_row])
-                        st.success(f"✅ 「{edit_item_name}」の情報を更新しました！")
+                        st.success(f"「{edit_item_name}」を更新しました！")
                     else:
-                        # 新規行として末尾に追加
                         sheet_karte.append_row(new_row)
-                        st.success(f"✅ 「{edit_item_name}」を新規登録しました！")
+                        st.success(f"「{edit_item_name}」を新規登録しました！")
+
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
 
-elif menu == "📚 商品カルテ一覧":
+elif menu == "📋 商品カルテ一覧":
         st.header("📋 商品カルテ・アーカイブ")
         try:
             client = get_gspread_client()
@@ -879,21 +846,39 @@ elif menu == "📚 商品カルテ一覧":
                 # 検索と絞り込み
                 c_f1, c_f2 = st.columns(2)
                 with c_f1:
-                    sel_gen = st.selectbox("ジャンル絞り込み", ["すべて"] + sorted(df_karte["ジャンル"].unique().tolist()), key="arch_gen")
+                    gen_options = ["すべて"] + sorted(list(set([g.strip() for gens in df_karte["ジャンル"].astype(str) for g in gens.split("/") if g.strip()])))
+                    sel_gen = st.selectbox("ジャンル絞り込み", gen_options, key="arch_gen")
+                
                 with c_f2:
-                    temp_df = df_karte if sel_gen == "すべて" else df_karte[df_karte["ジャンル"] == sel_gen]
-                    sel_type = st.selectbox("タイプ絞り込み", ["すべて"] + sorted(temp_df["アイテムタイプ"].unique().tolist()), key="arch_type")
+                    if sel_gen == "すべて":
+                        temp_df = df_karte
+                    else:
+                        temp_df = df_karte[df_karte["ジャンル"].astype(str).str.contains(sel_gen, na=False)]
+                    
+                    type_options = ["すべて"] + sorted(list(set([t.strip() for types in temp_df["アイテムタイプ"].astype(str) for t in types.split("/") if t.strip()])))
+                    sel_type = st.selectbox("タイプ絞り込み", type_options, key="arch_type")
 
                 # 最終候補の商品リスト
-                final_filter_df = temp_df if sel_type == "すべて" else temp_df[temp_df["アイテムタイプ"] == sel_type]
-                item_names = sorted(final_filter_df["商品名"].unique().tolist())
+                if sel_type == "すべて":
+                    final_filter_df = temp_df
+                else:
+                    final_filter_df = temp_df[temp_df["アイテムタイプ"].astype(str).str.contains(sel_type, na=False)]
                 
+                item_names = sorted(final_filter_df["商品名"].unique().tolist())
                 selected_item = st.selectbox("表示する商品を選択してください", ["未選択"] + item_names)
 
                 if selected_item != "未選択":
-                    # 選択された商品の詳細カードを表示
+                    # 選択された商品の詳細
                     row = final_filter_df[final_filter_df["商品名"] == selected_item].iloc[0]
+                    
                     st.markdown("---")
+                    
+                    # --- ⚠️ マルチ機能アラート表示 ---
+                    # ジャンルやタイプに「/」が含まれている場合に表示
+                    is_multi = "/" in str(row.get("ジャンル", "")) or "/" in str(row.get("アイテムタイプ", ""))
+                    if is_multi:
+                        st.warning(f"⚠️ **マルチ機能のある商品です**（{row['アイテムタイプ']}）")
+                    
                     col_img, col_det = st.columns([1, 2])
                     with col_img:
                         if row.get("画像URL"):
@@ -902,7 +887,8 @@ elif menu == "📚 商品カルテ一覧":
                             st.info("No Image")
                     with col_det:
                         st.title(row["商品名"])
-                        st.write(f"**カテゴリー:** {row['ジャンル']} / {row['アイテムタイプ']}")
+                        st.write(f"**カテゴリー:** {row['ジャンル']}")
+                        st.write(f"**アイテムタイプ:** {row['アイテムタイプ']}")
                         st.write(f"**最終更新:** {row['更新']}")
                     
                     st.markdown("#### 🧪 全成分")
@@ -912,7 +898,7 @@ elif menu == "📚 商品カルテ一覧":
                     st.info(row["公式情報"])
                     
                     if row.get("メモ"):
-                        st.warning(f"💡 **スタッフメモ**\n\n{row['メモ']}")
+                        st.success(f"💡 **スタッフメモ**\n\n{row['メモ']}")
                 
                 st.markdown("<br><br>", unsafe_allow_html=True)
                 st.divider()
@@ -921,9 +907,13 @@ elif menu == "📚 商品カルテ一覧":
                 st.subheader("📊 全商品アーカイブ")
                 st.caption("登録されている全データを一覧で確認・比較できます。")
                 
-                # 全データを表形式で表示（検索・ソート可能）
+                # 表示用の列を整理（画像URLなどは表だと長いため除外、または最後に配置）
+                display_cols = ["更新", "作成者", "ジャンル", "アイテムタイプ", "商品名", "全成分", "公式情報", "メモ"]
+                # 存在する列だけを表示
+                existing_cols = [c for c in display_cols if c in df_karte.columns]
+                
                 st.dataframe(
-                    df_karte[["更新", "ジャンル", "アイテムタイプ", "商品名", "全成分", "公式情報"]],
+                    df_karte[existing_cols],
                     use_container_width=True,
                     hide_index=True
                 )
