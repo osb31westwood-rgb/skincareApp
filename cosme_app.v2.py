@@ -11,6 +11,7 @@ from google.oauth2.service_account import Credentials
 import datetime
 import time
 from streamlit_option_menu import option_menu
+import requests
 
 # --- パスワード認証機能 ---
 def check_password():
