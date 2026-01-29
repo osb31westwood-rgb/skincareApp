@@ -1001,91 +1001,76 @@ elif menu == "🧪 成分マスタ編集":
             st.balloons()
 
 elif menu == "🧪 成分マスタ一覧":
-    st.header("🧪 登録済み成分・悩みマスタ")
-    try:
-        client = get_gspread_client()
-        sh = client.open("Cosme Data")
-        # マスタ用シートの取得
+        st.header("🧪 登録済み成分・悩みマスタ")
         try:
-            sheet_master = sh.worksheet("ingredient_master")
-            records = sheet_master.get_all_records()
-        except:
-            st.error("マスタシートが見つかりません。先に『マスタ編集』から保存を行ってください。")
-            st.stop()
-
-        if records:
-            df_master = pd.DataFrame(records)
+            client = get_gspread_client()
+            sh = client.open("Cosme Data")
             
-            # --- 1. 話題の成分ピックアップ ---
-            if "話題の成分フラグ" in df_master.columns:
-                trend_df = df_master[df_master["話題の成分フラグ"] == "TRUE"]
-                if not trend_df.empty:
-                    st.subheader("🔥 今注目のトレンド成分")
-                    cols = st.columns(len(trend_df.head(4)))
-                    for i, (_, row) in enumerate(trend_df.head(4).iterrows()):
-                        with cols[i]:
-                            st.metric(label=row["キーワード"], value=row["推奨成分"])
-                            st.caption(row["理由・ポップ用フレーズ"])
-                    st.divider()
+            # マスタ用シートの取得
+            try:
+                sheet_master = sh.worksheet("ingredient_master")
+                records = sheet_master.get_all_records()
+            except:
+                st.error("マスタシートが見つかりません。")
+                st.stop()
 
-            # --- 2. 全体リストをテーブル表示 ---
-            st.subheader("📋 マスタ全データ")
-            
-            # 検索機能を追加（キーワードや成分で絞り込み）
-            search_q = st.text_input("🔍 マスタ内を検索（悩み名、成分名など）", "")
-            if search_q:
-                df_display = df_master[
-                    df_master["キーワード"].str.contains(search_q, na=False) | 
-                    df_master["推奨成分"].str.contains(search_q, na=False)
-                ]
-            else:
-                df_display = df_master
+            if records:
+                df_master = pd.DataFrame(records)
+                
+                # --- 1. 話題の成分ピックアップ ---
+                if "話題の成分フラグ" in df_master.columns:
+                    trend_df = df_master[df_master["話題の成分フラグ"] == "TRUE"]
+                    if not trend_df.empty:
+                        st.subheader("🔥 今注目のトレンド成分")
+                        cols = st.columns(min(len(trend_df), 4))
+                        for i, (_, row) in enumerate(trend_df.head(4).iterrows()):
+                            with cols[i]:
+                                st.metric(label=row["キーワード"], value=row["推奨成分"])
+                                st.caption(row["理由・ポップ用フレーズ"])
+                        st.divider()
 
-            # 見やすい順に列を並び替え
-            view_cols = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ", "更新日"]
-            actual_cols = [c for c in view_cols if c in df_display.columns]
-            
-            st.dataframe(
-                df_display[actual_cols], 
-                use_container_width=True,
-                hide_index=True
-            )
+                # --- 2. 全体リストをテーブル表示 ---
+                st.subheader("📋 マスタ全データ")
+                search_q = st.text_input("🔍 マスタ内を検索（悩み名、成分名など）", "")
+                
+                if search_q:
+                    df_display = df_master[
+                        df_master["キーワード"].astype(str).str.contains(search_q, na=False) | 
+                        df_master["推奨成分"].astype(str).str.contains(search_q, na=False)
+                    ]
+                else:
+                    df_display = df_master
 
-            # --- 3. カテゴリ別のクイック確認（エラー防止版） ---
-            st.markdown("---")
-            st.subheader("💡 カテゴリ別クイック確認")
-            
-            # タブの作成
-            tabs = st.tabs(["悩み別", "環境別", "ライフスタイル別"])
-            
-            # 各カテゴリと表示名の対応
-            categories = [
-                ("悩み", tabs[0]),
-                ("環境", tabs[1]),
-                ("生活", tabs[2])
-            ]
+                view_cols = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ", "更新日"]
+                actual_cols = [c for c in view_cols if c in df_display.columns]
+                
+                st.dataframe(df_display[actual_cols], use_container_width=True, hide_index=True)
 
-            # 必要な列が揃っているか確認
-            required_cols = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ"]
-            # 存在する列だけでフィルタリング
-            available_cols = [c for c in required_cols if c in df_master.columns]
+                # --- 3. カテゴリ別のクイック確認 ---
+                st.markdown("---")
+                st.subheader("💡 カテゴリ別クイック確認")
+                
+                tabs = st.tabs(["悩み別", "環境別", "ライフスタイル別"])
+                # スプレッドシート側の「分類」ラベルと一致させる
+                categories = [("悩み", tabs[0]), ("環境", tabs[1]), ("生活", tabs[2])]
 
-            for cat_name, tab in categories:
-                with tab:
-                    if "分類" in df_master.columns:
-                        # 指定した分類のデータだけ抜き出す
-                        target_df = df_master[df_master["分類"] == cat_name]
-                        
-                        if not target_df.empty:
-                            # 必要な列だけ表示（存在するものに限定）
-                            st.table(target_df[available_cols])
+                for cat_name, tab in categories:
+                    with tab:
+                        if "分類" in df_master.columns:
+                            target_df = df_master[df_master["分類"] == cat_name]
+                            if not target_df.empty:
+                                # キーワードをボタンのように並べる（クリックで詳細）
+                                for _, row in target_df.iterrows():
+                                    with st.expander(f"📌 {row['キーワード']}"):
+                                        st.write(f"**推奨成分:** {row['推奨成分']}")
+                                        st.write(f"**解説:** {row['理由・ポップ用フレーズ']}")
+                            else:
+                                st.info(f"{cat_name}に関するデータはありません。")
                         else:
-                            st.info(f"{cat_name}に関するデータはまだ登録されていません。")
-                    else:
-                        st.error("スプレッドシートに『分類』列が見つかりません。")
+                            st.error("『分類』列が見つかりません。")
 
-    except Exception as e:
-        st.error(f"表示エラー: {e}")
+        except Exception as e:
+            st.error(f"表示エラーが発生しました: {e}")
 
 elif menu == "📈 アンケート分析":
     st.header("📊 アンケートデータ詳細分析")
