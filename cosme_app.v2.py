@@ -919,87 +919,6 @@ elif menu == "📚 商品カルテ一覧":
         st.error(f"表示エラー: {e}")
 
 
-elif menu == "🧪 成分マスタ編集":
-    st.header("🧪 成分・悩みマスタ編集")
-
-    try:
-        client = get_gspread_client()
-        sh = client.open("Cosme Data")
-        
-        try:
-            sheet_master = sh.worksheet("ingredient_master")
-        except:
-            sheet_master = sh.add_worksheet(title="ingredient_master", rows="100", cols="10")
-            header = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "更新日", "話題の成分フラグ"]
-            sheet_master.append_row(header)
-
-        records = sheet_master.get_all_records()
-        df_master = pd.DataFrame(records)
-        
-        # 必要な列がない場合の補完
-        for col in ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ"]:
-            if col not in df_master.columns:
-                df_master[col] = ""
-
-    except Exception as e:
-        st.error(f"接続エラー: {e}")
-        st.stop()
-
-    # 重複エラーを防ぐため、一意のkeyを持つフォームを作成
-    with st.form(key="master_final_v8"):
-        st.subheader("🎯 推奨設定とトレンド成分")
-        master_data_list = []
-        
-        # カテゴリごとにループ
-        # 「乾燥」が重複しても大丈夫なように、キーにカテゴリ名(cat_id)を混ぜます
-        target_groups = [
-            ("悩み", "trouble", ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]),
-            ("環境", "env", ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]),
-            ("ライフスタイル", "life", ["ストレス・睡眠・食生活"])
-        ]
-
-        for cat_name, cat_id, items in target_groups:
-            st.markdown(f"#### 【{cat_name}】")
-            for item in items:
-                # 既存データ取得（分類とキーワードの両方で判定するとより安全）
-                existing = {}
-                if not df_master.empty:
-                    match = df_master[(df_master["キーワード"] == item) & (df_master["分類"] == cat_name)]
-                    if not match.empty:
-                        existing = match.iloc[0].to_dict()
-                    elif not df_master[df_master["キーワード"] == item].empty:
-                        existing = df_master[df_master["キーワード"] == item].iloc[0].to_dict()
-                
-                c1, c2, c3 = st.columns([1, 2, 0.5])
-                with c1:
-                    # ★重要：keyに cat_id を入れることで「悩みの乾燥」と「環境の乾燥」を別物にする
-                    ing_val = st.text_input(f"{item}：成分", value=existing.get("推奨成分", ""), key=f"in_v8_{cat_id}_{item}")
-                with c2:
-                    phr_val = st.text_input(f"理由・フレーズ", value=existing.get("理由・ポップ用フレーズ", ""), key=f"ph_v8_{cat_id}_{item}")
-                with c3:
-                    # 話題の成分フラグ
-                    is_trend = st.checkbox("話題", value=(str(existing.get("話題の成分フラグ", "")) == "TRUE"), key=f"tr_v8_{cat_id}_{item}")
-                
-                master_data_list.append([cat_name, item, ing_val, phr_val, "TRUE" if is_trend else "FALSE"])
-            st.divider()
-
-        # フォームのインデント内でボタンを配置
-        save_btn = st.form_submit_button("✅ この内容でマスタを保存する")
-
-    # 保存処理
-    if save_btn:
-        with st.spinner("スプレッドシートを更新中..."):
-            now_jst = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-            header = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "更新日", "話題の成分フラグ"]
-            payload = [header]
-            for d in master_data_list:
-                payload.append([d[0], d[1], d[2], d[3], now_jst, d[4]])
-            
-            sheet_master.clear()
-            sheet_master.update("A1", payload)
-            st.success("マスタを更新しました！『乾燥』の重複問題も解決済みです。")
-            st.balloons()
-
 elif menu == "🧪 成分マスタ一覧":
         st.header("🧪 登録済み成分・悩みマスタ")
         try:
@@ -1019,11 +938,9 @@ elif menu == "🧪 成分マスタ一覧":
                 
                 # --- 1. 話題の成分ピックアップ ---
                 if "話題の成分フラグ" in df_master.columns:
-                    # TRUEやTrueなど表記揺れに対応
                     trend_df = df_master[df_master["話題の成分フラグ"].astype(str).str.upper() == "TRUE"]
                     if not trend_df.empty:
                         st.subheader("🔥 今注目のトレンド成分")
-                        # 最大4つまで横並び表示
                         num_cols = min(len(trend_df), 4)
                         cols = st.columns(num_cols)
                         for i, (_, row) in enumerate(trend_df.head(4).iterrows()):
@@ -1036,7 +953,6 @@ elif menu == "🧪 成分マスタ一覧":
                 st.subheader("📋 マスタ全データ検索")
                 search_q = st.text_input("🔍 悩み・環境・生活習慣のキーワードや成分名で検索", "")
                 
-                # 検索キーワードがある場合はフィルタリング
                 if search_q:
                     df_display = df_master[
                         df_master["キーワード"].astype(str).str.contains(search_q, na=False) | 
@@ -1050,18 +966,16 @@ elif menu == "🧪 成分マスタ一覧":
                 st.subheader("💡 カテゴリ別・推奨成分")
                 
                 tabs = st.tabs(["悩み別", "環境別", "ライフスタイル別"])
-                # スプレッドシートの「分類」列の文字と各タブを紐付け
                 categories = [("悩み", tabs[0]), ("環境", tabs[1]), ("生活", tabs[2])]
 
                 for cat_label, tab_obj in categories:
                     with tab_obj:
                         if "分類" in df_master.columns:
-                            # 現在の表示用データ(検索結果反映済み)からカテゴリ抽出
-                            target_df = df_display[df_display["分類"].astype(str).str.contains(cat_label, na=False)]
+                            # 重複を排除して抽出（キーワードが同じなら1つにまとめる）
+                            target_df = df_display[df_display["分類"].astype(str).str.contains(cat_label, na=False)].drop_duplicates(subset=['キーワード'])
                             
                             if not target_df.empty:
                                 for _, row in target_df.iterrows():
-                                    # キーワードが空でない行のみ📌を表示
                                     if row['キーワード']:
                                         with st.expander(f"📌 {row['キーワード']}"):
                                             st.write(f"**【推奨成分】** : {row['推奨成分']}")
@@ -1073,7 +987,7 @@ elif menu == "🧪 成分マスタ一覧":
                         else:
                             st.warning("シートに『分類』列が見つかりません。")
 
-                # --- 4. 全データ確認（すべてのタブの外、一番最後に配置） ---
+                # --- 4. 全データ確認（一番最後に1回だけ表示） ---
                 st.markdown("<br><br>", unsafe_allow_html=True)
                 st.divider()
                 with st.expander("🛠️ システム管理：全マスタデータを表形式で確認"):
