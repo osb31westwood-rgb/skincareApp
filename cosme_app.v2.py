@@ -1122,11 +1122,14 @@ elif menu == "📚 成分マスタ一覧":
                         if not target_df.empty:
                             for _, row in target_df.iterrows():
                                 if row['キーワード']:
+                                    # キーワードの横に(悩み)や(環境)を付けて重複を回避
                                     with st.expander(f"📌 {row['キーワード']} ({row['推奨成分']})"):
                                         st.write(f"**【推奨成分】** : {row['推奨成分']}")
                                         st.info(f"**【解説】** : \n{row['理由・ポップ用フレーズ']}")
-                                        # ボタンを押すと、下の絞り込み対象にセットされる
-                                        if st.button(f"🔎 {row['推奨成分']}で商品を探す", key=f"btn_{row['キーワード']}"):
+                                        
+                                        # --- 修正ポイント：keyにcat_label(悩み/環境/生活)を混ぜる ---
+                                        btn_id = f"btn_{cat_label}_{row['キーワード']}" 
+                                        if st.button(f"🔎 {row['推奨成分']}で商品を探す", key=btn_id):
                                             st.session_state.search_target = row['推奨成分']
 
                 # --- 4. 【隠れない絞り込み】タブの外側・マスタ表の上に配置 ---
