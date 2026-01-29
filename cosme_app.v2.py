@@ -805,12 +805,11 @@ elif menu == "📋 商品カルテ編集":
 
         # 保存ボタン
         if st.button("💾 カルテ内容を保存・更新", key="save_karte_edit"):
-            # ここから下の保存処理で delete_image や uploaded_file を安全に使えるようになります
-
             if not edit_item_name:
                 st.error("商品名を入力してください。")
             else:
                 with st.spinner("データを保存中..."):
+                    # 時間の設定（JST）
                     now_jst = datetime.datetime.now() + datetime.timedelta(hours=9)
                     now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
                     final_base_date = base_date if mode == "既存データから選んで編集" and base_date else now_str
@@ -822,38 +821,44 @@ elif menu == "📋 商品カルテ編集":
                         new_image_url = res_url if res_url else current_img_url
                     else: new_image_url = current_img_url
 
-                    # 【重要】新しい列順 A～K に完全対応
-                    # スプレッドシート：新規(A), 更新(B), 作成者(C), ジャンル(D), タイプ(E), 商品名(F), 全成分(G), 公式情報(H), AIコピー/ポップ案(I), メモ(J), 画像URL(K)
+                    # --- 【修正ポイント】列の順番をスプレッドシートに厳密に合わせる ---
+                    # A:新規, B:更新, C:作成者, D:ジャンル, E:タイプ, F:商品名, G:全成分, H:公式情報, I:AIコピー, J:メモ, K:画像URL
                     new_row = [
-                        final_base_date,    # A: 新規
-                        now_str,            # B: 更新
-                        edit_author,        # C: 作成者
-                        main_cat,           # D: ジャンル
-                        sub_cat,            # E: アイテムタイプ
-                        edit_item_name,     # F: 商品名
-                        edit_ingredients,   # G: 全成分 ★ここが追加
-                        edit_official_info, # H: 公式情報
-                        "",                 # I: AIコピー/ポップ案 (空で保存)
-                        edit_memo,          # J: メモ
-                        new_image_url       # K: 画像URL
+                        str(final_base_date),   # A
+                        now_str,                # B
+                        edit_author,            # C
+                        main_cat,               # D
+                        sub_cat,                # E
+                        edit_item_name,         # F
+                        edit_ingredients,       # G (全成分)
+                        edit_official_info,     # H (公式情報)
+                        "",                     # I (AIコピー)
+                        edit_memo,              # J
+                        new_image_url           # K
                     ]
 
-                    # --- 保存処理 ---
+                    # --- 保存・更新処理 ---
+                    # 最新のデータを再取得
                     all_records = sheet_karte.get_all_records()
                     df_all = pd.DataFrame(all_records)
 
+                    # 既に同じ商品名がある場合は「更新」、ない場合は「新規追加」
                     if not df_all.empty and edit_item_name in df_all["商品名"].values:
+                        # 既存行の特定（商品名で検索）
                         matching_rows = df_all[df_all["商品名"] == edit_item_name]
-                        row_index = matching_rows.index[0] + 2 
-                        if "新規" in df_all.columns:
-                            new_row[0] = str(matching_rows["新規"].values[0])
+                        row_index = matching_rows.index[0] + 2 # ヘッダー分+1、0始まり+1で合計+2
                         
+                        # 新規作成日(A列)は元の値を維持
+                        if "新規" in df_all.columns:
+                            new_row[0] = str(matching_rows.iloc[0]["新規"])
+                        
+                        # A列からK列までを一気に更新
                         sheet_karte.update(range_name=f"A{row_index}:K{row_index}", values=[new_row])
-                        st.success(f"「{edit_item_name}」の情報を更新しました！")
+                        st.success(f"✅ 「{edit_item_name}」の情報を更新しました！")
                     else:
+                        # 新規行として末尾に追加
                         sheet_karte.append_row(new_row)
-                        st.success(f"「{edit_item_name}」を新規登録しました！")
-
+                        st.success(f"✅ 「{edit_item_name}」を新規登録しました！")
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
 
