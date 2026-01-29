@@ -1012,185 +1012,208 @@ elif menu == "📚 商品カルテ一覧":
             st.error(f"⚠️ 読み込みエラー: {e}")
 
 
-elif menu == "🧪 成分マスタ編集":
-    st.header("🧪 成分・悩みマスタ編集")
-    try:
-        client = get_gspread_client()
-        sh = client.open("Cosme Data")
-        
-        try:
-            sheet_master = sh.worksheet("ingredient_master")
-        except:
-            sheet_master = sh.add_worksheet(title="ingredient_master", rows="100", cols="10")
-            header = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "更新日", "話題の成分フラグ"]
-            sheet_master.append_row(header)
-
-        records = sheet_master.get_all_records()
-        df_master = pd.DataFrame(records)
-        
-        # 必要な列がない場合の補完
-        for col in ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "話題の成分フラグ"]:
-            if col not in df_master.columns:
-                df_master[col] = ""
-
-    except Exception as e:
-        st.error(f"接続エラー: {e}")
-        st.stop()
-
-    # 重複エラーを防ぐため、一意のkeyを持つフォームを作成
-    with st.form(key="master_final_v8"):
-        st.subheader("🎯 推奨設定とトレンド成分")
-        master_data_list = []
-        
-        # カテゴリごとにループ
-        # 「乾燥」が重複しても大丈夫なように、キーにカテゴリ名(cat_id)を混ぜます
-        target_groups = [
-            ("悩み", "trouble", ["ハリ・弾力", "毛穴", "くすみ・透明感", "乾燥", "テカリ・べたつき", "肌荒れ"]),
-            ("環境", "env", ["乾燥", "日差し・紫外線", "湿気によるべたつき・蒸れ", "摩擦"]),
-            ("ライフスタイル", "life", ["ストレス・睡眠・食生活"])
-        ]
-
-        for cat_name, cat_id, items in target_groups:
-            st.markdown(f"#### 【{cat_name}】")
-            for item in items:
-                # 既存データ取得（分類とキーワードの両方で判定するとより安全）
-                existing = {}
-                if not df_master.empty:
-                    match = df_master[(df_master["キーワード"] == item) & (df_master["分類"] == cat_name)]
-                    if not match.empty:
-                        existing = match.iloc[0].to_dict()
-                    elif not df_master[df_master["キーワード"] == item].empty:
-                        existing = df_master[df_master["キーワード"] == item].iloc[0].to_dict()
-                
-                c1, c2, c3 = st.columns([1, 2, 0.5])
-                with c1:
-                    # ★重要：keyに cat_id を入れることで「悩みの乾燥」と「環境の乾燥」を別物にする
-                    ing_val = st.text_input(f"{item}：成分", value=existing.get("推奨成分", ""), key=f"in_v8_{cat_id}_{item}")
-                with c2:
-                    phr_val = st.text_input(f"理由・フレーズ", value=existing.get("理由・ポップ用フレーズ", ""), key=f"ph_v8_{cat_id}_{item}")
-                with c3:
-                    # 話題の成分フラグ
-                    is_trend = st.checkbox("話題", value=(str(existing.get("話題の成分フラグ", "")) == "TRUE"), key=f"tr_v8_{cat_id}_{item}")
-                
-                master_data_list.append([cat_name, item, ing_val, phr_val, "TRUE" if is_trend else "FALSE"])
-            st.divider()
-
-        # フォームのインデント内でボタンを配置
-        save_btn = st.form_submit_button("✅ この内容でマスタを保存する")
-
-    # 保存処理
-    if save_btn:
-        with st.spinner("スプレッドシートを更新中..."):
-            now_jst = (datetime.datetime.now() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
-            header = ["分類", "キーワード", "推奨成分", "理由・ポップ用フレーズ", "更新日", "話題の成分フラグ"]
-            payload = [header]
-            for d in master_data_list:
-                payload.append([d[0], d[1], d[2], d[3], now_jst, d[4]])
-            
-            sheet_master.clear()
-            sheet_master.update("A1", payload)
-            st.success("マスタを更新しました！")
-            st.balloons()
-
 elif menu == "📚 成分マスタ一覧":
+
         st.header("🧪 登録済み成分・悩みマスタ")
+
         try:
+
             client = get_gspread_client()
+
             sh = client.open("Cosme Data")
+
             
+
+            # --- 1. 両方のシートを読み込み ---
+
             with st.spinner("データを同期中..."):
+
                 sheet_master = sh.worksheet("ingredient_master")
+
                 df_master = pd.DataFrame(sheet_master.get_all_records())
+
+                
+
                 sheet_k = sh.worksheet("カルテ")
+
                 df_karte = pd.DataFrame(sheet_k.get_all_records())
 
-            if not df_master.empty:
-                # --- 2. トレンド表示（省略：以前と同じ） ---
-                # (ここにお手元のトレンド表示コードを入れてください)
 
-                # --- 3. 解説エリア（タブ） ---
-                st.subheader("💡 カテゴリ別・推奨成分の解説")
+
+            if not df_master.empty:
+
+                # --- 2. トレンド成分表示 ---
+
+                if "話題の成分フラグ" in df_master.columns:
+
+                    trend_df = df_master[df_master["話題の成分フラグ"].astype(str).str.upper() == "TRUE"]
+
+                    if not trend_df.empty:
+
+                        st.subheader("🔥 今注目のトレンド成分")
+
+                        cols = st.columns(min(len(trend_df), 4))
+
+                        for i, (_, row) in enumerate(trend_df.head(4).iterrows()):
+
+                            with cols[i]:
+
+                                st.metric(label=f"✨ {row['キーワード']}", value=row["推奨成分"])
+
+                                st.caption(row["理由・ポップ用フレーズ"])
+
+                        st.divider()
+
+
+
+                # --- 3. カテゴリ別表示 & 商品絞り込み連携 ---
+
+                st.subheader("💡 カテゴリ別・推奨成分とおすすめ商品")
+
                 tabs = st.tabs(["悩み別", "環境別", "ライフスタイル別"])
-                
-                # ユーザーがどの成分に興味を持ったかを保持するための変数
-                selected_ing_from_tab = "未選択"
 
                 categories = [("悩み", tabs[0]), ("環境", tabs[1]), ("生活", tabs[2])]
+
+
+
                 for cat_label, tab_obj in categories:
+
                     with tab_obj:
+
                         target_df = df_master[df_master["分類"].astype(str).str.contains(cat_label, na=False)].drop_duplicates(subset=['キーワード'])
+
+                        
+
                         if not target_df.empty:
+
                             for _, row in target_df.iterrows():
+
                                 if row['キーワード']:
-                                    with st.expander(f"📌 {row['キーワード']} ({row['推奨成分']})"):
+
+                                    with st.expander(f"📌 {row['キーワード']}"):
+
                                         st.write(f"**【推奨成分】** : {row['推奨成分']}")
+
                                         st.info(f"**【解説】** : \n{row['理由・ポップ用フレーズ']}")
-                                        # ボタンを押すと、下の絞り込み対象にセットされる
-                                        if st.button(f"🔎 {row['推奨成分']}で商品を探す", key=f"btn_{row['キーワード']}"):
-                                            st.session_state.search_target = row['推奨成分']
 
-                # --- 4. 【隠れない絞り込み】タブの外側・マスタ表の上に配置 ---
-                st.divider()
-                # 初期表示用のセッション状態管理
-                if "search_target" not in st.session_state:
-                    st.session_state.search_target = "未選択"
+                                        
 
-                # 全成分リストを作成
-                all_master_ing = sorted(list(set(df_master["推奨成分"].astype(str).tolist())))
-                
-                # 選択肢のインデックスを特定（タブ内のボタン連携用）
-                try:
-                    current_index = all_master_ing.index(st.session_state.search_target) + 1
-                except:
-                    current_index = 0
+                                        # --- 商品連携 & 絞り込みセクション ---
 
-                target_ing = st.selectbox(
-                    "🛍️ 配合商品の絞り込み（成分を選択）", 
-                    ["未選択"] + all_master_ing, 
-                    index=current_index,
-                    key="main_search_selectbox"
-                )
+                                        target_ing = row['推奨成分']
 
-                if target_ing != "未選択":
-                    matched_prods = df_karte[df_karte["全成分"].astype(str).str.contains(target_ing, na=False)]
-                    
-                    if not matched_prods.empty:
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            all_gens = []
-                            for gs in matched_prods["ジャンル"].astype(str):
-                                all_gens.extend([g.strip() for g in gs.split("/") if g.strip()])
-                            gen_list = ["すべて"] + sorted(list(set(all_gens)))
-                            sel_gen = st.selectbox("ジャンル", gen_list, key="fix_gen")
-                        
-                        with c2:
-                            temp_df = matched_prods if sel_gen == "すべて" else matched_prods[matched_prods["ジャンル"].astype(str).str.contains(sel_gen, na=False)]
-                            all_types = []
-                            for ts in temp_df["アイテムタイプ"].astype(str):
-                                all_types.extend([t.strip() for t in ts.split("/") if t.strip()])
-                            type_list = ["すべて"] + sorted(list(set(all_types)))
-                            sel_type = st.selectbox("アイテムタイプ", type_list, key="fix_type")
-                        
-                        final_df = temp_df if sel_type == "すべて" else temp_df[temp_df["アイテムタイプ"].astype(str).str.contains(sel_type, na=False)]
-                        
-                        if not final_df.empty:
-                            prod_list = final_df["商品名"].tolist()
-                            selected_prod = st.selectbox(f"該当商品 ({len(prod_list)}件)", ["選択してください"] + prod_list, key="fix_final")
-                            
-                            if selected_prod != "選択してください":
-                                p_data = final_df[final_df["商品名"] == selected_prod].iloc[0]
-                                st.success(f"**{selected_prod}**\n\n{p_data['公式情報'][:150]}...")
-                        else:
-                            st.warning("条件に合う商品がありません")
-                    else:
-                        st.caption(f"現在、{target_ing} を含む商品は登録されていません。")
+                                        # その成分を含む商品を抽出
 
-            # --- 5. 全データ確認 ---
+                                        matched_prods = df_karte[df_karte["全成分"].astype(str).str.contains(target_ing, na=False)]
+
+                                        
+
+                                        if not matched_prods.empty:
+
+                                            st.markdown("---")
+
+                                            st.write(f"🛍️ **{target_ing}** 配合商品の絞り込み")
+
+                                            
+
+                                            # 【修正ポイント】カラム作成を適切な位置へ
+
+                                            c1, c2 = st.columns(2)
+
+                                            with c1:
+
+                                                # ジャンルで絞り込み（複数ジャンル対応）
+
+                                                all_gens = []
+
+                                                for gs in matched_prods["ジャンル"].astype(str):
+
+                                                    all_gens.extend([g.strip() for g in gs.split("/")])
+
+                                                gen_list = ["すべて"] + sorted(list(set(all_gens)))
+
+                                                sel_gen = st.selectbox("ジャンル", gen_list, key=f"gen_{row['キーワード']}")
+
+                                            
+
+                                            with c2:
+
+                                                # ジャンル絞り込み（部分一致で判定）
+
+                                                if sel_gen == "すべて":
+
+                                                    temp_df = matched_prods
+
+                                                else:
+
+                                                    temp_df = matched_prods[matched_prods["ジャンル"].astype(str).str.contains(sel_gen, na=False)]
+
+                                                
+
+                                                all_types = []
+
+                                                for ts in temp_df["アイテムタイプ"].astype(str):
+
+                                                    all_types.extend([t.strip() for t in ts.split("/")])
+
+                                                type_list = ["すべて"] + sorted(list(set(all_types)))
+
+                                                sel_type = st.selectbox("アイテムタイプ", type_list, key=f"type_{row['キーワード']}")
+
+                                            
+
+                                            # 最終的な表示用リスト（アイテムタイプも部分一致）
+
+                                            if sel_type == "すべて":
+
+                                                final_df = temp_df
+
+                                            else:
+
+                                                final_df = temp_df[temp_df["アイテムタイプ"].astype(str).str.contains(sel_type, na=False)]
+
+                                            
+
+                                            if not final_df.empty:
+
+                                                prod_list = final_df["商品名"].tolist()
+
+                                                selected_prod = st.selectbox(f"該当商品 ({len(prod_list)}件)", ["選択してください"] + prod_list, key=f"final_{row['キーワード']}")
+
+                                                
+
+                                                if selected_prod != "選択してください":
+
+                                                    p_data = final_df[final_df["商品名"] == selected_prod].iloc[0]
+
+                                                    st.success(f"**{selected_prod}**\n\n{p_data['公式情報'][:100]}...")
+
+                                            else:
+
+                                                st.warning("条件に合う商品がありません")
+
+                                        else:
+
+                                            st.caption("現在、この成分を含む商品は登録されていません。")
+
+            else:
+
+                st.info("データがありません。")
+
+
+
+            # --- 4. 全データ確認 ---
+
             st.divider()
+
             with st.expander("🛠️ 全マスタデータを表形式で確認"):
+
                 st.dataframe(df_master, use_container_width=True, hide_index=True)
 
+
+
         except Exception as e:
+
             st.error(f"⚠️ エラー: {e}")
 
 elif menu == "📈 アンケート分析":
