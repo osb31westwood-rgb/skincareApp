@@ -1142,41 +1142,54 @@ elif menu == "📚 成分マスタ一覧":
                         else:
                             st.info(f"現在、{cat_label}に関するマスタ登録はありません。")
 
-                # --- 2. 【独立セクション】ジャンル・タイプで配合商品を絞り込む ---
+# --- 2. 【独立セクション】ジャンル・タイプで配合商品を絞り込む ---
                 st.divider()
                 st.subheader("🔍 配合商品をカテゴリで絞り込む")
                 
                 col1, col2 = st.columns(2)
                 
+                # 最初から「全成分」が登録されている商品だけに限定する
+                # これにより、成分未登録の商品が混ざるのを防ぎます
+                valid_karte_df = df_karte[
+                    (df_karte["全成分"].astype(str).str.strip() != "") & 
+                    (df_karte["全成分"].astype(str).str.lower() != "nan")
+                ]
+
                 with col1:
-                    raw_gens = [g.strip() for gs in df_karte["ジャンル"].astype(str) for g in gs.split("/") if g.strip() and g != 'nan']
+                    # 有効な商品からジャンルを抽出
+                    raw_gens = [g.strip() for gs in valid_karte_df["ジャンル"].astype(str) for g in gs.split("/") if g.strip() and g != 'nan']
                     genre_options = ["すべて"] + sorted(list(set(raw_gens)))
                     selected_genre = st.selectbox("ジャンルで絞り込む", genre_options, key="search_genre")
 
                 with col2:
+                    # ジャンルでフィルタリング
                     if selected_genre == "すべて":
-                        filtered_df = df_karte
+                        temp_filtered_df = valid_karte_df
                     else:
-                        filtered_df = df_karte[df_karte["ジャンル"].astype(str).str.contains(selected_genre, na=False)]
+                        temp_filtered_df = valid_karte_df[valid_karte_df["ジャンル"].astype(str).str.contains(selected_genre, na=False)]
                     
-                    raw_types = [t.strip() for ts in filtered_df["アイテムタイプ"].astype(str) for t in ts.split("/") if t.strip() and t != 'nan']
+                    # アイテムタイプを抽出
+                    raw_types = [t.strip() for ts in temp_filtered_df["アイテムタイプ"].astype(str) for t in ts.split("/") if t.strip() and t != 'nan']
                     type_options = ["すべて"] + sorted(list(set(raw_types)))
                     selected_type = st.selectbox("アイテムタイプで絞り込む", type_options, key="search_type")
 
+                # 最終的な絞り込み
+                final_filtered_df = temp_filtered_df
                 if selected_type != "すべて":
-                    filtered_df = filtered_df[filtered_df["アイテムタイプ"].astype(str).str.contains(selected_type, na=False)]
+                    final_filtered_df = temp_filtered_df[temp_filtered_df["アイテムタイプ"].astype(str).str.contains(selected_type, na=False)]
 
-                if not filtered_df.empty:
-                    st.write(f"✨ 該当商品: **{len(filtered_df)}件**")
-                    selected_item_name = st.selectbox("商品詳細を表示", ["選択してください"] + filtered_df["商品名"].tolist(), key="search_final_select")
+                # 表示判定
+                if not final_filtered_df.empty:
+                    st.write(f"✨ 該当商品: **{len(final_filtered_df)}件**")
+                    selected_item_name = st.selectbox("商品詳細を表示", ["選択してください"] + final_filtered_df["商品名"].tolist(), key="search_final_select")
                     
                     if selected_item_name != "選択してください":
-                        item_detail = filtered_df[filtered_df["商品名"] == selected_item_name].iloc[0]
+                        item_detail = final_filtered_df[final_filtered_df["商品名"] == selected_item_name].iloc[0]
                         st.markdown(f"### 💎 {selected_item_name}")
                         st.info(f"**成分:** {item_detail.get('全成分', '未登録')}")
                 else:
-                    st.error("該当商品なし（条件に合う商品が見つかりません）")
-
+                    # 成分が入っていない、または条件に合うものがない場合
+                    st.error("該当商品なし（成分情報が登録されている商品が見つかりません）")
             else:
                 st.info("マスタデータがありません。")
 
