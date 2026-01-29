@@ -862,7 +862,7 @@ elif menu == "📋 商品カルテ編集":
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
 
-elif menu == "📋 商品カルテ一覧":
+elif menu == "📚 商品カルテ一覧":
         st.header("📋 商品カルテ・アーカイブ")
         try:
             client = get_gspread_client()
