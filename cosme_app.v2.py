@@ -22,15 +22,19 @@ def check_password():
     # すでに認証済みなら何もしない
     if st.session_state["password_correct"]:
         return True
+    
+
+    app_title = st.secrets.get("APP_TITLE", "専用分析ツール")
+    user_name = st.secrets.get("USER_NAME", "User")
 
     # パスワード入力画面の表示
-    st.title("🔐 Sachika専用ツール")
+    st.title(f"🔐 {app_title}")
     st.write("このアプリを使用するには合言葉が必要です。")
     
     password_input = st.text_input("パスワードを入力してください", type="password")
     
     # 秘密の合言葉（好きな文字に変えてください）
-    SECRET_PASSWORD = st.secrets.get("APP_PASSWORD", "fs11710n") 
+    SECRET_PASSWORD = st.secrets.get("APP_PASSWORD") 
 
     if st.button("ログイン"):
         if password_input == SECRET_PASSWORD:
@@ -236,7 +240,7 @@ df = load_data()
 
 # サイドバー基本設定
 with st.sidebar:
-    st.title("💄 Sachika's Cosme")
+    st.title("💄 {user_name}'s Cosme")
     
     # アイコン付きメニューの設定
     menu = option_menu(
