@@ -240,7 +240,8 @@ df = load_data()
 
 # サイドバー基本設定
 with st.sidebar:
-    st.title("💄 {user_name}'s Cosme")
+    user_name = st.secrets.get("USER_NAME", "User")
+    st.title(f"💄 {user_name}'s Cosme")
     
     # アイコン付きメニューの設定
     menu = option_menu(
